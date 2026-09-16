@@ -29,6 +29,12 @@ import {
   deleteAchievement,
   getAchievementMessage,
   updateAchievementMessage,
+  getTeamMembers,
+  getTeamMemberById,
+  createTeamMember,
+  updateTeamMember,
+  deleteTeamMember,
+  reorderTeamMembers,
 } from './server/db.ts';
 
 const PORT = 3000;
@@ -154,6 +160,17 @@ async function startServer() {
     } catch (err: any) {
       console.error('Error fetching achievements:', err);
       res.status(500).json({ error: 'Failed to retrieve achievements' });
+    }
+  });
+
+  // Public Team Members endpoint
+  app.get('/api/team-members', (req, res) => {
+    try {
+      const members = getTeamMembers();
+      res.json(members);
+    } catch (err: any) {
+      console.error('Error fetching team members:', err);
+      res.status(500).json({ error: 'Failed to retrieve team members' });
     }
   });
 
@@ -471,6 +488,21 @@ async function startServer() {
         happyIcon,
         messageTitle,
         messageContent,
+        brandName,
+        brandTagline,
+        brandLogo,
+        aboutMessageTitle,
+        aboutMessageSubtitle,
+        aboutMessageIcon,
+        developerName,
+        developerRole,
+        developerDescription,
+        developerPhoto,
+        developerTagline,
+        developerSocialLinks,
+        aboutFooterTitle,
+        aboutFooterSubtitle,
+        aboutFooterTagline,
       } = req.body;
 
       const updated = updateSiteSettings({
@@ -483,12 +515,27 @@ async function startServer() {
         happyIcon: happyIcon !== undefined ? String(happyIcon) : undefined,
         messageTitle: messageTitle !== undefined ? String(messageTitle) : undefined,
         messageContent: messageContent !== undefined ? String(messageContent) : undefined,
+        brandName: brandName !== undefined ? String(brandName) : undefined,
+        brandTagline: brandTagline !== undefined ? String(brandTagline) : undefined,
+        brandLogo: brandLogo !== undefined ? String(brandLogo) : undefined,
+        aboutMessageTitle: aboutMessageTitle !== undefined ? String(aboutMessageTitle) : undefined,
+        aboutMessageSubtitle: aboutMessageSubtitle !== undefined ? String(aboutMessageSubtitle) : undefined,
+        aboutMessageIcon: aboutMessageIcon !== undefined ? String(aboutMessageIcon) : undefined,
+        developerName: developerName !== undefined ? String(developerName) : undefined,
+        developerRole: developerRole !== undefined ? String(developerRole) : undefined,
+        developerDescription: developerDescription !== undefined ? String(developerDescription) : undefined,
+        developerPhoto: developerPhoto !== undefined ? String(developerPhoto) : undefined,
+        developerTagline: developerTagline !== undefined ? String(developerTagline) : undefined,
+        developerSocialLinks: developerSocialLinks !== undefined ? developerSocialLinks : undefined,
+        aboutFooterTitle: aboutFooterTitle !== undefined ? String(aboutFooterTitle) : undefined,
+        aboutFooterSubtitle: aboutFooterSubtitle !== undefined ? String(aboutFooterSubtitle) : undefined,
+        aboutFooterTagline: aboutFooterTagline !== undefined ? String(aboutFooterTagline) : undefined,
       });
 
       res.json(updated);
     } catch (err: any) {
       console.error('Error saving site settings:', err);
-      res.status(500).json({ error: 'Failed to save site settings' });
+      res.status(400).json({ error: err.message || 'Failed to save site settings' });
     }
   });
 
@@ -509,6 +556,99 @@ async function startServer() {
     } catch (err: any) {
       console.error('Error updating admin message:', err);
       res.status(500).json({ error: 'Failed to update message' });
+    }
+  });
+
+  // ==========================================
+  // ADMIN TEAM MEMBERS ROUTES
+  // ==========================================
+  app.get('/api/admin/team-members', requireAdminAuth, (req, res) => {
+    try {
+      const members = getTeamMembers();
+      res.json(members);
+    } catch (err: any) {
+      console.error('Error fetching admin team members:', err);
+      res.status(500).json({ error: 'Failed to retrieve team members' });
+    }
+  });
+
+  app.post('/api/admin/team-members', requireAdminAuth, (req, res) => {
+    try {
+      const { name, role, description, photo, sortOrder, socialLinks } = req.body;
+      if (!name || typeof name !== 'string' || !name.trim()) {
+        return res.status(400).json({ error: 'Team member name is required' });
+      }
+      if (!role || typeof role !== 'string' || !role.trim()) {
+        return res.status(400).json({ error: 'Team member role / designation is required' });
+      }
+
+      const created = createTeamMember({
+        name: name.trim(),
+        role: role.trim(),
+        description: description ? String(description) : '',
+        photo: photo ? String(photo) : '',
+        sortOrder: typeof sortOrder === 'number' ? sortOrder : undefined,
+        socialLinks: Array.isArray(socialLinks) ? socialLinks : [],
+      });
+      res.status(201).json(created);
+    } catch (err: any) {
+      console.error('Error creating team member:', err);
+      res.status(400).json({ error: err.message || 'Failed to create team member' });
+    }
+  });
+
+  app.put('/api/admin/team-members/:id', requireAdminAuth, (req, res) => {
+    try {
+      const { id } = req.params;
+      const { name, role, description, photo, sortOrder, socialLinks } = req.body;
+      if (name !== undefined && (!name || !String(name).trim())) {
+        return res.status(400).json({ error: 'Team member name cannot be empty' });
+      }
+      if (role !== undefined && (!role || !String(role).trim())) {
+        return res.status(400).json({ error: 'Team member role cannot be empty' });
+      }
+
+      const updated = updateTeamMember(id, {
+        name: name !== undefined ? String(name).trim() : undefined,
+        role: role !== undefined ? String(role).trim() : undefined,
+        description: description !== undefined ? String(description) : undefined,
+        photo: photo !== undefined ? String(photo) : undefined,
+        sortOrder: typeof sortOrder === 'number' ? sortOrder : undefined,
+        socialLinks: socialLinks !== undefined ? socialLinks : undefined,
+      });
+
+      if (!updated) {
+        return res.status(404).json({ error: 'Team member not found' });
+      }
+      res.json(updated);
+    } catch (err: any) {
+      console.error('Error updating team member:', err);
+      res.status(400).json({ error: err.message || 'Failed to update team member' });
+    }
+  });
+
+  app.delete('/api/admin/team-members/:id', requireAdminAuth, (req, res) => {
+    try {
+      const { id } = req.params;
+      deleteTeamMember(id);
+      res.json({ success: true, message: 'Team member deleted' });
+    } catch (err: any) {
+      console.error('Error deleting team member:', err);
+      res.status(500).json({ error: 'Failed to delete team member' });
+    }
+  });
+
+  app.post('/api/admin/team-members/reorder', requireAdminAuth, (req, res) => {
+    try {
+      const { ids } = req.body;
+      if (!Array.isArray(ids)) {
+        return res.status(400).json({ error: 'Invalid ids array for reordering' });
+      }
+      reorderTeamMembers(ids);
+      res.json({ success: true, members: getTeamMembers() });
+    } catch (err: any) {
+      console.error('Error reordering team members:', err);
+      res.status(500).json({ error: 'Failed to reorder team members' });
     }
   });
 

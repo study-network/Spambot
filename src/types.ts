@@ -55,6 +55,37 @@ export interface AuthResponse {
   user: AdminUser;
 }
 
+export type SocialPlatform = 
+  | 'telegram' 
+  | 'whatsapp' 
+  | 'instagram' 
+  | 'youtube' 
+  | 'github' 
+  | 'twitter' 
+  | 'facebook' 
+  | 'linkedin' 
+  | 'website' 
+  | 'custom';
+
+export interface SocialLink {
+  id: string;
+  platform: SocialPlatform | string;
+  url: string;
+  customName?: string;
+}
+
+export interface TeamMember {
+  id: string;
+  name: string;
+  role: string;
+  description?: string;
+  photo?: string;
+  sortOrder?: number;
+  socialLinks: SocialLink[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface SiteSettings {
   id?: string;
   telegramUrl: string;
@@ -66,6 +97,30 @@ export interface SiteSettings {
   happyIcon?: string;
   messageTitle?: string;
   messageContent?: string;
+  
+  // Brand / Header section
+  brandName?: string;
+  brandTagline?: string;
+  brandLogo?: string;
+
+  // About message section
+  aboutMessageTitle?: string;
+  aboutMessageSubtitle?: string;
+  aboutMessageIcon?: string;
+
+  // Developer section
+  developerName?: string;
+  developerRole?: string;
+  developerDescription?: string;
+  developerPhoto?: string;
+  developerTagline?: string;
+  developerSocialLinks?: SocialLink[];
+
+  // About footer
+  aboutFooterTitle?: string;
+  aboutFooterSubtitle?: string;
+  aboutFooterTagline?: string;
+
   createdAt?: string;
   updatedAt?: string;
 }

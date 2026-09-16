@@ -113,6 +113,19 @@ export async function initDatabase(): Promise<Database> {
       content TEXT NOT NULL DEFAULT '',
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS team_members (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      role TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      photo TEXT NOT NULL DEFAULT '',
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      social_links TEXT NOT NULL DEFAULT '[]',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_team_members_sort ON team_members(sort_order ASC, created_at ASC);
   `);
 
   // Migrate servers table if existing table lacks 'Some Error' category
@@ -172,6 +185,67 @@ export async function initDatabase(): Promise<Database> {
         db.run(`ALTER TABLE site_settings ADD COLUMN message_content TEXT NOT NULL DEFAULT ''`);
         console.log('[Database] Added message_content column to site_settings');
       }
+
+      // Brand / About Us / Developer columns migration
+      const brandCols: Array<{ name: string; type: string; defaultVal: string }> = [
+        { name: 'brand_name', type: 'TEXT', defaultVal: "'LINK VERSE'" },
+        { name: 'brand_tagline', type: 'TEXT', defaultVal: "'LEARN • EXPLORE • GROW'" },
+        { name: 'brand_logo', type: 'TEXT', defaultVal: "''" },
+        { name: 'about_message_title', type: 'TEXT', defaultVal: "'Knowledge shared is a brighter tomorrow.'" },
+        { name: 'about_message_subtitle', type: 'TEXT', defaultVal: "'Stay Connected • Stay Curious • Stay Ahead'" },
+        { name: 'about_message_icon', type: 'TEXT', defaultVal: "''" },
+        { name: 'developer_name', type: 'TEXT', defaultVal: "'Ritesh'" },
+        { name: 'developer_role', type: 'TEXT', defaultVal: "'Founder & Developer'" },
+        { name: 'developer_description', type: 'TEXT', defaultVal: "''" },
+        { name: 'developer_photo', type: 'TEXT', defaultVal: "''" },
+        { name: 'developer_tagline', type: 'TEXT', defaultVal: "'Code • Create • Contribute • Grow'" },
+        { name: 'developer_social_links', type: 'TEXT', defaultVal: "'[]'" },
+        { name: 'about_footer_title', type: 'TEXT', defaultVal: "'Thanks for being a part of LINK VERSE.'" },
+        { name: 'about_footer_subtitle', type: 'TEXT', defaultVal: "'Together, we can make learning simple, free and accessible for everyone.'" },
+        { name: 'about_footer_tagline', type: 'TEXT', defaultVal: "'Keep Learning • Keep Exploring • Keep Growing'" },
+      ];
+
+      for (const col of brandCols) {
+        if (!colNames.includes(col.name)) {
+          try {
+            db.run(`ALTER TABLE site_settings ADD COLUMN ${col.name} ${col.type} NOT NULL DEFAULT ${col.defaultVal}`);
+            console.log(`[Database] Added ${col.name} column to site_settings`);
+          } catch (colErr) {
+            console.error(`[Database] Failed to add column ${col.name}:`, colErr);
+          }
+        }
+      }
+
+      // Initialize default developer description if empty
+      const defaultDevBio = "Hi! I'm the developer of LINK VERSE. I build this platform to make learning and resources easily accessible for everyone. My goal is to create a simple, fast and helpful platform for students and learners.";
+      const devBioCheck = db.prepare(`SELECT developer_description FROM site_settings LIMIT 1`);
+      if (devBioCheck.step()) {
+        const val = devBioCheck.get();
+        if (!val[0] || String(val[0]).trim() === '') {
+          db.run(`UPDATE site_settings SET developer_description = ? WHERE id = (SELECT id FROM site_settings LIMIT 1)`, [defaultDevBio]);
+          console.log('[Database] Initialized default developer description');
+        }
+      }
+      devBioCheck.free();
+
+      // Initialize default developer social links if currently empty or '[]'
+      const devSocialCheck = db.prepare(`SELECT developer_social_links FROM site_settings LIMIT 1`);
+      if (devSocialCheck.step()) {
+        const val = devSocialCheck.get();
+        if (!val[0] || String(val[0]).trim() === '' || String(val[0]).trim() === '[]') {
+          const defaultDevSocials = JSON.stringify([
+            { id: 'dev-1', platform: 'telegram', url: 'https://t.me/ritesh' },
+            { id: 'dev-2', platform: 'whatsapp', url: 'https://wa.me/919876543210' },
+            { id: 'dev-3', platform: 'instagram', url: 'https://instagram.com/ritesh' },
+            { id: 'dev-4', platform: 'youtube', url: 'https://youtube.com/@ritesh' },
+            { id: 'dev-5', platform: 'github', url: 'https://github.com/ritesh' },
+          ]);
+          db.run(`UPDATE site_settings SET developer_social_links = ? WHERE id = (SELECT id FROM site_settings LIMIT 1)`, [defaultDevSocials]);
+          console.log('[Database] Initialized default developer social links');
+        }
+      }
+      devSocialCheck.free();
+
       // Populate default message content if it's empty so the user sees the example immediately
       const defaultExampleMsg = `📚 Stay consistent and keep learning every day.\n🚫 Do not misuse or share restricted links.\n💡 Use this platform only for educational purposes.\n❤️ Keep learning and stay motivated!`;
       const currentMsgStmt = db.prepare(`SELECT message_content FROM site_settings LIMIT 1`);
@@ -404,6 +478,81 @@ export async function initDatabase(): Promise<Database> {
       aStmt.free();
     }
     console.log('[Database] Initialized default sample achievements');
+  }
+
+  // Seed sample team members if table is empty
+  const teamCheck = db.exec(`SELECT id FROM team_members LIMIT 1`);
+  if (teamCheck.length === 0 || teamCheck[0].values.length === 0) {
+    console.log('[Database] Seeding initial sample team members...');
+    const now = new Date().toISOString();
+    const defaultMembers = [
+      {
+        id: 'team-1',
+        name: 'Ritesh',
+        role: 'Founder & Developer',
+        description: 'A passionate developer who loves to build useful learning tools for everyone.',
+        photo: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=300&q=80',
+        sortOrder: 1,
+        socialLinks: [
+          { id: 't-1-1', platform: 'telegram', url: 'https://t.me/ritesh' },
+          { id: 't-1-2', platform: 'github', url: 'https://github.com/ritesh' },
+          { id: 't-1-3', platform: 'youtube', url: 'https://youtube.com/@ritesh' },
+        ],
+      },
+      {
+        id: 'team-2',
+        name: 'Aman',
+        role: 'Backend Support',
+        description: 'Backend architect specializing in distributed servers and secure link routing.',
+        photo: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=300&q=80',
+        sortOrder: 2,
+        socialLinks: [
+          { id: 't-2-1', platform: 'github', url: 'https://github.com/aman' },
+          { id: 't-2-2', platform: 'linkedin', url: 'https://linkedin.com/in/aman' },
+        ],
+      },
+      {
+        id: 'team-3',
+        name: 'Priya',
+        role: 'UI/UX Designer',
+        description: 'Creative product designer shaping clean, accessible interfaces for students.',
+        photo: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=300&q=80',
+        sortOrder: 3,
+        socialLinks: [
+          { id: 't-3-1', platform: 'instagram', url: 'https://instagram.com/priya' },
+          { id: 't-3-2', platform: 'linkedin', url: 'https://linkedin.com/in/priya' },
+        ],
+      },
+      {
+        id: 'team-4',
+        name: 'Sahil',
+        role: 'Content Manager',
+        description: 'Content manager curating verified resources and educational links.',
+        photo: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80',
+        sortOrder: 4,
+        socialLinks: [], // No social links, exactly matching screenshot!
+      },
+    ];
+
+    for (const member of defaultMembers) {
+      const tmStmt = db.prepare(`
+        INSERT INTO team_members (id, name, role, description, photo, sort_order, social_links, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      tmStmt.run([
+        member.id,
+        member.name,
+        member.role,
+        member.description,
+        member.photo,
+        member.sortOrder,
+        JSON.stringify(member.socialLinks),
+        now,
+        now,
+      ]);
+      tmStmt.free();
+    }
+    console.log('[Database] Initialized default sample team members');
   }
 
   saveDb();
@@ -756,7 +905,12 @@ export function getUserByEmail(email: string) {
 export function getSiteSettings() {
   const database = getDb();
   const stmt = database.prepare(`
-    SELECT id, telegram_url, whatsapp_url, about_title, about_description, happy_title, happy_message, happy_icon, message_title, message_content, created_at, updated_at
+    SELECT id, telegram_url, whatsapp_url, about_title, about_description, happy_title, happy_message, happy_icon, message_title, message_content,
+           brand_name, brand_tagline, brand_logo,
+           about_message_title, about_message_subtitle, about_message_icon,
+           developer_name, developer_role, developer_description, developer_photo, developer_tagline, developer_social_links,
+           about_footer_title, about_footer_subtitle, about_footer_tagline,
+           created_at, updated_at
     FROM site_settings
     LIMIT 1
   `);
@@ -773,6 +927,27 @@ export function getSiteSettings() {
       happyIcon: '💜',
       messageTitle: 'Important Message',
       messageContent: '📚 Stay consistent and keep learning every day.\n🚫 Do not misuse or share restricted links.\n💡 Use this platform only for educational purposes.\n❤️ Keep learning and stay motivated!',
+      brandName: 'LINK VERSE',
+      brandTagline: 'LEARN • EXPLORE • GROW',
+      brandLogo: '',
+      aboutMessageTitle: 'Knowledge shared is a brighter tomorrow.',
+      aboutMessageSubtitle: 'Stay Connected • Stay Curious • Stay Ahead',
+      aboutMessageIcon: '',
+      developerName: 'Ritesh',
+      developerRole: 'Founder & Developer',
+      developerDescription: "Hi! I'm the developer of LINK VERSE. I build this platform to make learning and resources easily accessible for everyone. My goal is to create a simple, fast and helpful platform for students and learners.",
+      developerPhoto: '',
+      developerTagline: 'Code • Create • Contribute • Grow',
+      developerSocialLinks: [
+        { id: 'dev-1', platform: 'telegram', url: 'https://t.me/ritesh' },
+        { id: 'dev-2', platform: 'whatsapp', url: 'https://wa.me/919876543210' },
+        { id: 'dev-3', platform: 'instagram', url: 'https://instagram.com/ritesh' },
+        { id: 'dev-4', platform: 'youtube', url: 'https://youtube.com/@ritesh' },
+        { id: 'dev-5', platform: 'github', url: 'https://github.com/ritesh' },
+      ],
+      aboutFooterTitle: 'Thanks for being a part of LINK VERSE.',
+      aboutFooterSubtitle: 'Together, we can make learning simple, free and accessible for everyone.',
+      aboutFooterTagline: 'Keep Learning • Keep Exploring • Keep Growing',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -780,6 +955,16 @@ export function getSiteSettings() {
 
   const row = stmt.get();
   stmt.free();
+
+  let devLinks: Array<{ id: string; platform: string; url: string; customName?: string }> = [];
+  try {
+    if (row[21]) {
+      devLinks = JSON.parse(String(row[21]));
+    }
+  } catch (e) {
+    devLinks = [];
+  }
+
   return {
     id: String(row[0]),
     telegramUrl: String(row[1] || ''),
@@ -791,8 +976,23 @@ export function getSiteSettings() {
     happyIcon: String(row[7] || '💜'),
     messageTitle: String(row[8] ?? 'Important Message'),
     messageContent: String(row[9] ?? ''),
-    createdAt: String(row[10]),
-    updatedAt: String(row[11]),
+    brandName: String(row[10] || 'LINK VERSE'),
+    brandTagline: String(row[11] || 'LEARN • EXPLORE • GROW'),
+    brandLogo: String(row[12] || ''),
+    aboutMessageTitle: String(row[13] || 'Knowledge shared is a brighter tomorrow.'),
+    aboutMessageSubtitle: String(row[14] || 'Stay Connected • Stay Curious • Stay Ahead'),
+    aboutMessageIcon: String(row[15] || ''),
+    developerName: String(row[16] || 'Ritesh'),
+    developerRole: String(row[17] || 'Founder & Developer'),
+    developerDescription: String(row[18] || "Hi! I'm the developer of LINK VERSE. I build this platform to make learning and resources easily accessible for everyone. My goal is to create a simple, fast and helpful platform for students and learners."),
+    developerPhoto: String(row[19] || ''),
+    developerTagline: String(row[20] || 'Code • Create • Contribute • Grow'),
+    developerSocialLinks: Array.isArray(devLinks) ? devLinks : [],
+    aboutFooterTitle: String(row[22] || 'Thanks for being a part of LINK VERSE.'),
+    aboutFooterSubtitle: String(row[23] || 'Together, we can make learning simple, free and accessible for everyone.'),
+    aboutFooterTagline: String(row[24] || 'Keep Learning • Keep Exploring • Keep Growing'),
+    createdAt: String(row[25]),
+    updatedAt: String(row[26]),
   };
 }
 
@@ -806,6 +1006,21 @@ export function updateSiteSettings(payload: {
   happyIcon?: string;
   messageTitle?: string;
   messageContent?: string;
+  brandName?: string;
+  brandTagline?: string;
+  brandLogo?: string;
+  aboutMessageTitle?: string;
+  aboutMessageSubtitle?: string;
+  aboutMessageIcon?: string;
+  developerName?: string;
+  developerRole?: string;
+  developerDescription?: string;
+  developerPhoto?: string;
+  developerTagline?: string;
+  developerSocialLinks?: any[];
+  aboutFooterTitle?: string;
+  aboutFooterSubtitle?: string;
+  aboutFooterTagline?: string;
 }) {
   const database = getDb();
   const now = new Date().toISOString();
@@ -824,6 +1039,31 @@ export function updateSiteSettings(payload: {
   const messageTitle = payload.messageTitle !== undefined ? payload.messageTitle.trim() : (existing.messageTitle || 'Important Message');
   const messageContent = payload.messageContent !== undefined ? payload.messageContent : (existing.messageContent || '');
 
+  const brandName = payload.brandName !== undefined ? payload.brandName.trim() : (existing.brandName || 'LINK VERSE');
+  const brandTagline = payload.brandTagline !== undefined ? payload.brandTagline.trim() : (existing.brandTagline || 'LEARN • EXPLORE • GROW');
+  const brandLogo = payload.brandLogo !== undefined ? payload.brandLogo.trim() : (existing.brandLogo || '');
+  const aboutMessageTitle = payload.aboutMessageTitle !== undefined ? payload.aboutMessageTitle.trim() : (existing.aboutMessageTitle || 'Knowledge shared is a brighter tomorrow.');
+  const aboutMessageSubtitle = payload.aboutMessageSubtitle !== undefined ? payload.aboutMessageSubtitle.trim() : (existing.aboutMessageSubtitle || 'Stay Connected • Stay Curious • Stay Ahead');
+  const aboutMessageIcon = payload.aboutMessageIcon !== undefined ? payload.aboutMessageIcon.trim() : (existing.aboutMessageIcon || '');
+  const developerName = payload.developerName !== undefined ? payload.developerName.trim() : (existing.developerName || 'Ritesh');
+  const developerRole = payload.developerRole !== undefined ? payload.developerRole.trim() : (existing.developerRole || 'Founder & Developer');
+  const developerDescription = payload.developerDescription !== undefined ? payload.developerDescription.trim() : (existing.developerDescription || '');
+  const developerPhoto = payload.developerPhoto !== undefined ? payload.developerPhoto.trim() : (existing.developerPhoto || '');
+  const developerTagline = payload.developerTagline !== undefined ? payload.developerTagline.trim() : (existing.developerTagline || 'Code • Create • Contribute • Grow');
+  
+  let developerSocialLinksStr = JSON.stringify(existing.developerSocialLinks || []);
+  if (payload.developerSocialLinks !== undefined) {
+    const cleaned = cleanAndValidateSocialLinks(payload.developerSocialLinks);
+    if (!cleaned.valid) {
+      throw new Error(cleaned.error || 'Invalid developer social links');
+    }
+    developerSocialLinksStr = JSON.stringify(cleaned.links);
+  }
+
+  const aboutFooterTitle = payload.aboutFooterTitle !== undefined ? payload.aboutFooterTitle.trim() : (existing.aboutFooterTitle || 'Thanks for being a part of LINK VERSE.');
+  const aboutFooterSubtitle = payload.aboutFooterSubtitle !== undefined ? payload.aboutFooterSubtitle.trim() : (existing.aboutFooterSubtitle || 'Together, we can make learning simple, free and accessible for everyone.');
+  const aboutFooterTagline = payload.aboutFooterTagline !== undefined ? payload.aboutFooterTagline.trim() : (existing.aboutFooterTagline || 'Keep Learning • Keep Exploring • Keep Growing');
+
   const check = database.exec(`SELECT id FROM site_settings WHERE id = '${rowId}'`);
   if (check.length > 0 && check[0].values.length > 0) {
     const stmt = database.prepare(`
@@ -837,6 +1077,21 @@ export function updateSiteSettings(payload: {
           happy_icon = ?,
           message_title = ?,
           message_content = ?,
+          brand_name = ?,
+          brand_tagline = ?,
+          brand_logo = ?,
+          about_message_title = ?,
+          about_message_subtitle = ?,
+          about_message_icon = ?,
+          developer_name = ?,
+          developer_role = ?,
+          developer_description = ?,
+          developer_photo = ?,
+          developer_tagline = ?,
+          developer_social_links = ?,
+          about_footer_title = ?,
+          about_footer_subtitle = ?,
+          about_footer_tagline = ?,
           updated_at = ?
       WHERE id = ?
     `);
@@ -850,6 +1105,21 @@ export function updateSiteSettings(payload: {
       happyIcon || '💜',
       messageTitle || 'Important Message',
       messageContent,
+      brandName,
+      brandTagline,
+      brandLogo,
+      aboutMessageTitle,
+      aboutMessageSubtitle,
+      aboutMessageIcon,
+      developerName,
+      developerRole,
+      developerDescription,
+      developerPhoto,
+      developerTagline,
+      developerSocialLinksStr,
+      aboutFooterTitle,
+      aboutFooterSubtitle,
+      aboutFooterTagline,
       now,
       rowId,
     ]);
@@ -857,8 +1127,12 @@ export function updateSiteSettings(payload: {
   } else {
     const stmt = database.prepare(`
       INSERT INTO site_settings (
-        id, telegram_url, whatsapp_url, about_title, about_description, happy_title, happy_message, happy_icon, message_title, message_content, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, telegram_url, whatsapp_url, about_title, about_description, happy_title, happy_message, happy_icon, message_title, message_content,
+        brand_name, brand_tagline, brand_logo, about_message_title, about_message_subtitle, about_message_icon,
+        developer_name, developer_role, developer_description, developer_photo, developer_tagline, developer_social_links,
+        about_footer_title, about_footer_subtitle, about_footer_tagline,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     stmt.run([
       rowId,
@@ -871,6 +1145,21 @@ export function updateSiteSettings(payload: {
       happyIcon || '💜',
       messageTitle || 'Important Message',
       messageContent,
+      brandName,
+      brandTagline,
+      brandLogo,
+      aboutMessageTitle,
+      aboutMessageSubtitle,
+      aboutMessageIcon,
+      developerName,
+      developerRole,
+      developerDescription,
+      developerPhoto,
+      developerTagline,
+      developerSocialLinksStr,
+      aboutFooterTitle,
+      aboutFooterSubtitle,
+      aboutFooterTagline,
       now,
       now,
     ]);
@@ -879,6 +1168,305 @@ export function updateSiteSettings(payload: {
 
   saveDb();
   return getSiteSettings();
+}
+
+// ==========================================
+// SOCIAL LINKS & TEAM MEMBERS
+// ==========================================
+
+export interface SocialLinkRecord {
+  id: string;
+  platform: string;
+  url: string;
+  customName?: string;
+}
+
+export interface TeamMemberRecord {
+  id: string;
+  name: string;
+  role: string;
+  description: string;
+  photo: string;
+  sortOrder: number;
+  socialLinks: SocialLinkRecord[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function cleanAndValidateSocialLinks(rawLinks: any): { valid: boolean; links: SocialLinkRecord[]; error?: string } {
+  if (!rawLinks) return { valid: true, links: [] };
+  let linksArray = rawLinks;
+  if (typeof rawLinks === 'string') {
+    try {
+      linksArray = JSON.parse(rawLinks);
+    } catch {
+      return { valid: false, links: [], error: 'Invalid social links JSON format' };
+    }
+  }
+  if (!Array.isArray(linksArray)) return { valid: true, links: [] };
+
+  const validPlatforms = [
+    'telegram', 'whatsapp', 'instagram', 'youtube', 'github', 
+    'twitter', 'facebook', 'linkedin', 'website', 'custom'
+  ];
+
+  const cleaned: SocialLinkRecord[] = [];
+  for (let i = 0; i < linksArray.length; i++) {
+    const item = linksArray[i];
+    if (!item || typeof item !== 'object') continue;
+    const platform = String(item.platform || 'website').toLowerCase().trim();
+    const url = String(item.url || '').trim();
+    const customName = item.customName ? String(item.customName).trim() : undefined;
+
+    // "If a social link is optional and left empty:
+    // - Ignore it.
+    // - Do not show an error.
+    // - Do not create an empty social-link record."
+    if (!url) {
+      continue;
+    }
+
+    // Validate URL syntax
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(url);
+    } catch {
+      return { valid: false, links: [], error: `Invalid URL "${url}". Please enter a valid URL (e.g. https://instagram.com/example)` };
+    }
+
+    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+      return { valid: false, links: [], error: `URL "${url}" must start with http:// or https://` };
+    }
+
+    cleaned.push({
+      id: item.id && typeof item.id === 'string' ? item.id : `link-${crypto.randomUUID().slice(0, 8)}`,
+      platform: validPlatforms.includes(platform) ? platform : 'custom',
+      url: parsedUrl.toString(),
+      customName,
+    });
+  }
+
+  return { valid: true, links: cleaned };
+}
+
+export function getTeamMembers(): TeamMemberRecord[] {
+  const database = getDb();
+  const res = database.exec(`
+    SELECT id, name, role, description, photo, sort_order, social_links, created_at, updated_at
+    FROM team_members
+    ORDER BY sort_order ASC, created_at ASC
+  `);
+  if (res.length === 0) return [];
+
+  return res[0].values.map(row => {
+    let socialLinks: SocialLinkRecord[] = [];
+    try {
+      if (row[6]) {
+        socialLinks = JSON.parse(String(row[6]));
+      }
+    } catch (e) {
+      socialLinks = [];
+    }
+
+    return {
+      id: String(row[0]),
+      name: String(row[1]),
+      role: String(row[2]),
+      description: String(row[3] || ''),
+      photo: String(row[4] || ''),
+      sortOrder: Number(row[5] || 0),
+      socialLinks: Array.isArray(socialLinks) ? socialLinks : [],
+      createdAt: String(row[7]),
+      updatedAt: String(row[8]),
+    };
+  });
+}
+
+export function getTeamMemberById(id: string): TeamMemberRecord | null {
+  const database = getDb();
+  const stmt = database.prepare(`
+    SELECT id, name, role, description, photo, sort_order, social_links, created_at, updated_at
+    FROM team_members
+    WHERE id = ?
+    LIMIT 1
+  `);
+  stmt.bind([id]);
+  if (!stmt.step()) {
+    stmt.free();
+    return null;
+  }
+  const row = stmt.get();
+  stmt.free();
+
+  let socialLinks: SocialLinkRecord[] = [];
+  try {
+    if (row[6]) {
+      socialLinks = JSON.parse(String(row[6]));
+    }
+  } catch (e) {
+    socialLinks = [];
+  }
+
+  return {
+    id: String(row[0]),
+    name: String(row[1]),
+    role: String(row[2]),
+    description: String(row[3] || ''),
+    photo: String(row[4] || ''),
+    sortOrder: Number(row[5] || 0),
+    socialLinks: Array.isArray(socialLinks) ? socialLinks : [],
+    createdAt: String(row[7]),
+    updatedAt: String(row[8]),
+  };
+}
+
+export function createTeamMember(payload: {
+  name: string;
+  role: string;
+  description?: string;
+  photo?: string;
+  sortOrder?: number;
+  socialLinks?: any[];
+}): TeamMemberRecord {
+  const database = getDb();
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+
+  // Determine sortOrder
+  let sortOrder = payload.sortOrder;
+  if (sortOrder === undefined) {
+    const maxOrderRes = database.exec(`SELECT MAX(sort_order) FROM team_members`);
+    if (maxOrderRes.length > 0 && maxOrderRes[0].values.length > 0 && maxOrderRes[0].values[0][0] !== null) {
+      sortOrder = Number(maxOrderRes[0].values[0][0]) + 1;
+    } else {
+      sortOrder = 1;
+    }
+  }
+
+  const cleaned = cleanAndValidateSocialLinks(payload.socialLinks);
+  if (!cleaned.valid) {
+    throw new Error(cleaned.error || 'Invalid social links');
+  }
+
+  const stmt = database.prepare(`
+    INSERT INTO team_members (id, name, role, description, photo, sort_order, social_links, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  stmt.run([
+    id,
+    payload.name.trim(),
+    payload.role.trim(),
+    payload.description ? payload.description.trim() : '',
+    payload.photo ? payload.photo.trim() : '',
+    sortOrder,
+    JSON.stringify(cleaned.links),
+    now,
+    now,
+  ]);
+  stmt.free();
+  saveDb();
+
+  return {
+    id,
+    name: payload.name.trim(),
+    role: payload.role.trim(),
+    description: payload.description ? payload.description.trim() : '',
+    photo: payload.photo ? payload.photo.trim() : '',
+    sortOrder,
+    socialLinks: cleaned.links,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+export function updateTeamMember(
+  id: string,
+  payload: {
+    name?: string;
+    role?: string;
+    description?: string;
+    photo?: string;
+    sortOrder?: number;
+    socialLinks?: any[];
+  }
+): TeamMemberRecord | null {
+  const database = getDb();
+  const existing = getTeamMemberById(id);
+  if (!existing) return null;
+
+  const now = new Date().toISOString();
+  const name = payload.name !== undefined ? payload.name.trim() : existing.name;
+  const role = payload.role !== undefined ? payload.role.trim() : existing.role;
+  const description = payload.description !== undefined ? payload.description.trim() : existing.description;
+  const photo = payload.photo !== undefined ? payload.photo.trim() : existing.photo;
+  const sortOrder = payload.sortOrder !== undefined ? payload.sortOrder : existing.sortOrder;
+
+  let socialLinks = existing.socialLinks;
+  if (payload.socialLinks !== undefined) {
+    const cleaned = cleanAndValidateSocialLinks(payload.socialLinks);
+    if (!cleaned.valid) {
+      throw new Error(cleaned.error || 'Invalid social links');
+    }
+    socialLinks = cleaned.links;
+  }
+
+  const stmt = database.prepare(`
+    UPDATE team_members
+    SET name = ?, role = ?, description = ?, photo = ?, sort_order = ?, social_links = ?, updated_at = ?
+    WHERE id = ?
+  `);
+  stmt.run([
+    name,
+    role,
+    description,
+    photo,
+    sortOrder,
+    JSON.stringify(socialLinks),
+    now,
+    id,
+  ]);
+  stmt.free();
+  saveDb();
+
+  return {
+    id,
+    name,
+    role,
+    description,
+    photo,
+    sortOrder,
+    socialLinks,
+    createdAt: existing.createdAt,
+    updatedAt: now,
+  };
+}
+
+export function deleteTeamMember(id: string): boolean {
+  const database = getDb();
+  const stmt = database.prepare(`DELETE FROM team_members WHERE id = ?`);
+  stmt.run([id]);
+  stmt.free();
+  saveDb();
+  return true;
+}
+
+export function reorderTeamMembers(ids: string[]): boolean {
+  const database = getDb();
+  const now = new Date().toISOString();
+  database.run('BEGIN TRANSACTION;');
+  try {
+    const stmt = database.prepare(`UPDATE team_members SET sort_order = ?, updated_at = ? WHERE id = ?`);
+    ids.forEach((id, idx) => {
+      stmt.run([idx + 1, now, id]);
+    });
+    stmt.free();
+    database.run('COMMIT;');
+    saveDb();
+    return true;
+  } catch (err) {
+    database.run('ROLLBACK;');
+    throw err;
+  }
 }
 
 // ==========================================

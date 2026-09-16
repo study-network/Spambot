@@ -6,6 +6,7 @@ import {
   SiteSettings,
   Achievement,
   AchievementMessage,
+  TeamMember,
 } from '../types.ts';
 
 const TOKEN_KEY = 'web_app_admin_token';
@@ -321,4 +322,87 @@ export async function deleteAchievement(id: string): Promise<void> {
     const data = await res.json().catch(() => ({}));
     throw new Error(data.error || 'Failed to delete achievement');
   }
+}
+
+// Team Members API
+export async function fetchPublicTeamMembers(): Promise<TeamMember[]> {
+  const res = await fetch('/api/team-members');
+  if (!res.ok) {
+    throw new Error('Failed to fetch team members');
+  }
+  return res.json();
+}
+
+export async function fetchAdminTeamMembers(): Promise<TeamMember[]> {
+  const res = await fetch('/api/admin/team-members', {
+    headers: getHeaders(true),
+  });
+  if (!res.ok) {
+    throw new Error('Failed to fetch admin team members');
+  }
+  return res.json();
+}
+
+export async function createTeamMember(payload: {
+  name: string;
+  role: string;
+  description?: string;
+  photo?: string;
+  sortOrder?: number;
+  socialLinks?: any[];
+}): Promise<TeamMember> {
+  const res = await fetch('/api/admin/team-members', {
+    method: 'POST',
+    headers: getHeaders(true),
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || 'Failed to create team member');
+  }
+  return data;
+}
+
+export async function updateTeamMember(id: string, payload: {
+  name?: string;
+  role?: string;
+  description?: string;
+  photo?: string;
+  sortOrder?: number;
+  socialLinks?: any[];
+}): Promise<TeamMember> {
+  const res = await fetch(`/api/admin/team-members/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: getHeaders(true),
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || 'Failed to update team member');
+  }
+  return data;
+}
+
+export async function deleteTeamMember(id: string): Promise<void> {
+  const res = await fetch(`/api/admin/team-members/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: getHeaders(true),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Failed to delete team member');
+  }
+}
+
+export async function reorderTeamMembers(ids: string[]): Promise<TeamMember[]> {
+  const res = await fetch('/api/admin/team-members/reorder', {
+    method: 'POST',
+    headers: getHeaders(true),
+    body: JSON.stringify({ ids }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || 'Failed to reorder team members');
+  }
+  return data.members;
 }

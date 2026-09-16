@@ -23,13 +23,15 @@ import {
   Server,
   Settings,
   Megaphone,
-  Trophy
+  Trophy,
+  Users
 } from 'lucide-react';
 import { FloatingAddButton } from './FloatingAddButton.tsx';
 import { CategoryBadge } from './CategoryBadge.tsx';
 import { SiteSettingsForm } from './SiteSettingsForm.tsx';
 import { MessageNoticeForm } from './MessageNoticeForm.tsx';
 import { AchievementAdminSection } from './AchievementAdminSection.tsx';
+import { AboutUsAdminSection } from './AboutUsAdminSection.tsx';
 
 interface AdminDashboardProps {
   stats: DashboardStats | null;
@@ -74,7 +76,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onSwitchToPublic,
   onToggleServerStatus,
 }) => {
-  const [activeTab, setActiveTab] = useState<'apps' | 'achievements' | 'message' | 'settings'>('apps');
+  const [activeTab, setActiveTab] = useState<'apps' | 'achievements' | 'message' | 'about' | 'settings'>('apps');
   const [searchQuery, setSearchQuery] = useState('');
 
   const filteredApps = webApps.filter(app =>
@@ -258,6 +260,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </button>
 
           <button
+            id="tab-about-us-settings"
+            type="button"
+            onClick={() => setActiveTab('about')}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
+              activeTab === 'about'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800'
+            }`}
+          >
+            <Users className="w-4 h-4 text-purple-400" />
+            <span>About Us & Team</span>
+          </button>
+
+          <button
             id="tab-site-settings"
             type="button"
             onClick={() => setActiveTab('settings')}
@@ -289,6 +305,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <MessageNoticeForm
             settings={settings}
             onSave={onSaveSettings}
+          />
+        )}
+
+        {activeTab === 'about' && (
+          <AboutUsAdminSection
+            settings={settings}
+            onSaveSettings={onSaveSettings}
           />
         )}
 
