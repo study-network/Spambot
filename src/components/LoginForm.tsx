@@ -22,7 +22,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess, onBackToHome })
 
     const trimmedEmail = email.trim();
     if (!trimmedEmail) {
-      setError('Please enter your admin email address.');
+      setError('Please enter your admin email or username.');
       return;
     }
     if (!password) {
@@ -41,9 +41,14 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess, onBackToHome })
     }
   };
 
-  const handleQuickFill = () => {
-    setEmail('admin@example.com');
-    setPassword('Admin@123456');
+  const handleQuickFill = (type: 'default' | 'simple' = 'default') => {
+    if (type === 'simple') {
+      setEmail('admin');
+      setPassword('admin');
+    } else {
+      setEmail('admin@example.com');
+      setPassword('Admin@123456');
+    }
     setError(null);
   };
 
@@ -94,18 +99,18 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess, onBackToHome })
               htmlFor="admin-email"
               className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5 uppercase tracking-wider"
             >
-              Email Address
+              Email or Username
             </label>
             <div className="relative">
               <Mail className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 id="admin-email"
-                type="email"
-                autoComplete="email"
+                type="text"
+                autoComplete="username"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="admin@example.com"
+                placeholder="admin@example.com or admin"
                 className="w-full pl-10 pr-4 py-2.5 bg-neutral-50 dark:bg-neutral-800/80 border border-neutral-200 dark:border-neutral-700 rounded-xl text-sm text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
               />
             </div>
@@ -166,22 +171,38 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess, onBackToHome })
         {/* Demo Seed Credentials Hint Box */}
         <div className="mt-8 pt-6 border-t border-neutral-100 dark:border-neutral-800">
           <div className="p-3.5 rounded-2xl bg-indigo-50/70 dark:bg-neutral-800/80 border border-indigo-100/80 dark:border-neutral-700/60">
-            <div className="flex items-center justify-between mb-1.5">
+            <div className="flex items-center justify-between mb-2">
               <span className="flex items-center gap-1.5 text-xs font-semibold text-indigo-900 dark:text-indigo-300">
                 <ShieldCheck className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                Default Seed Credentials
+                Admin Credentials (.env)
               </span>
-              <button
-                type="button"
-                onClick={handleQuickFill}
-                className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
-              >
-                Auto-fill
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleQuickFill('simple')}
+                  className="px-2 py-0.5 rounded-md bg-indigo-100 dark:bg-indigo-900/60 text-[11px] font-semibold text-indigo-700 dark:text-indigo-300 hover:bg-indigo-200 transition-colors cursor-pointer"
+                  title="Quick fill admin / admin"
+                >
+                  admin / admin
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleQuickFill('default')}
+                  className="px-2 py-0.5 rounded-md bg-indigo-600 text-[11px] font-semibold text-white hover:bg-indigo-700 transition-colors cursor-pointer"
+                  title="Quick fill default credentials"
+                >
+                  Auto-fill
+                </button>
+              </div>
             </div>
-            <div className="text-[11px] text-neutral-600 dark:text-neutral-400 font-mono space-y-0.5">
-              <div>Email: <span className="font-semibold text-neutral-900 dark:text-neutral-200">admin@example.com</span></div>
-              <div>Pass: <span className="font-semibold text-neutral-900 dark:text-neutral-200">Admin@123456</span></div>
+            <div className="text-[11px] text-neutral-600 dark:text-neutral-400 font-mono space-y-1">
+              <div className="flex items-center justify-between">
+                <span>Login: <strong className="text-neutral-900 dark:text-neutral-100">admin</strong> / <strong className="text-neutral-900 dark:text-neutral-100">admin</strong></span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300">.env</span>
+              </div>
+              <div className="text-[10px] text-neutral-500 dark:text-neutral-400 font-sans mt-1">
+                You can customize <code className="text-indigo-600 dark:text-indigo-400">ADMIN_ID</code> &amp; <code className="text-indigo-600 dark:text-indigo-400">ADMIN_PASSWORD</code> in <code className="text-neutral-800 dark:text-neutral-200">.env</code>.
+              </div>
             </div>
           </div>
         </div>

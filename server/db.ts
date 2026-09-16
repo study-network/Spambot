@@ -1,3 +1,5 @@
+import dotenv from 'dotenv';
+dotenv.config({ override: true });
 import fs from 'fs';
 import path from 'path';
 import initSqlJs, { type Database } from 'sql.js';
@@ -73,6 +75,7 @@ export async function initDatabase(): Promise<Database> {
       url TEXT NOT NULL,
       category TEXT NOT NULL CHECK(category IN ('Working', 'Error', 'Some Error', 'Unfilter', 'Testing')),
       sort_order INTEGER NOT NULL,
+      is_active INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -92,6 +95,22 @@ export async function initDatabase(): Promise<Database> {
       message_title TEXT NOT NULL DEFAULT 'Important Message',
       message_content TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS achievements (
+      id TEXT PRIMARY KEY,
+      image_url TEXT NOT NULL,
+      comment TEXT NOT NULL,
+      is_pinned INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS achievement_message (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL DEFAULT 'Important Message',
+      content TEXT NOT NULL DEFAULT '',
       updated_at TEXT NOT NULL
     );
   `);
@@ -121,6 +140,20 @@ export async function initDatabase(): Promise<Database> {
         saveDb();
         console.log('[Database] Migrated servers table to include Some Error category');
       }
+    }
+    // Migrate servers table if existing table lacks is_active column
+    try {
+      const serverCols = db.exec(`PRAGMA table_info(servers)`);
+      if (serverCols.length > 0 && serverCols[0].values.length > 0) {
+        const colNames = serverCols[0].values.map((col: any) => String(col[1]));
+        if (!colNames.includes('is_active')) {
+          db.run(`ALTER TABLE servers ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1`);
+          saveDb();
+          console.log('[Database] Added is_active column to servers table');
+        }
+      }
+    } catch (colErr) {
+      console.warn('[Database] servers is_active column migration notice:', colErr);
     }
   } catch (migErr) {
     console.warn('[Database] Servers table migration notice:', migErr);
@@ -156,11 +189,69 @@ export async function initDatabase(): Promise<Database> {
     console.warn('[Database] site_settings migration notice:', migErr);
   }
 
-  // Seed default admin accounts
-  const seedUsers = [
+  // Migrate achievements table if missing is_pinned column
+  try {
+    const achCols = db.exec(`PRAGMA table_info(achievements)`);
+    if (achCols.length > 0 && achCols[0].values.length > 0) {
+      const colNames = achCols[0].values.map((col: any) => String(col[1]));
+      if (!colNames.includes('is_pinned')) {
+        db.run(`ALTER TABLE achievements ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0`);
+        saveDb();
+        console.log('[Database] Added is_pinned column to achievements table');
+      }
+    }
+    // Safely create index now that column is guaranteed to exist
+    db.run(`CREATE INDEX IF NOT EXISTS idx_achievements_pinned ON achievements(is_pinned DESC, created_at DESC)`);
+  } catch (migErr) {
+    console.warn('[Database] achievements migration notice:', migErr);
+  }
+
+  // Seed default achievement message if table exists but empty
+  try {
+    const msgCheck = db.exec(`SELECT id FROM achievement_message WHERE id = 'default' LIMIT 1`);
+    if (msgCheck.length === 0 || msgCheck[0].values.length === 0) {
+      const defaultAchievementMsg = `Keep working hard and stay consistent.\nYour hard work will definitely pay off.\nNever give up on your goals.\nKeep learning and improving every day. ❤️`;
+      const mStmt = db.prepare(`
+        INSERT INTO achievement_message (id, title, content, updated_at)
+        VALUES ('default', 'Important Message', ?, ?)
+      `);
+      mStmt.run([defaultAchievementMsg, new Date().toISOString()]);
+      mStmt.free();
+      saveDb();
+      console.log('[Database] Seeded default achievement message');
+    }
+  } catch (msgErr) {
+    console.warn('[Database] achievement_message seed notice:', msgErr);
+  }
+
+  // Seed default admin accounts from environment variables (.env)
+  const envAdminId = (process.env.ADMIN_ID || process.env.ADMIN_USERNAME || '').toLowerCase().trim();
+  const envEmail = (process.env.ADMIN_EMAIL || '').toLowerCase().trim();
+  const envPass = process.env.ADMIN_PASSWORD;
+
+  const seedUsers: Array<{ email: string; pass: string }> = [
+    { email: 'admin', pass: 'admin' },
     { email: 'admin@example.com', pass: 'Admin@123456' },
-    { email: process.env.ADMIN_EMAIL || 'admin10@gmail.com', pass: process.env.ADMIN_PASSWORD || 'admin' },
+    { email: 'admin10@gmail.com', pass: 'admin' },
   ];
+
+  if (envAdminId && envPass) {
+    const existing = seedUsers.find(u => u.email === envAdminId);
+    if (existing) {
+      existing.pass = envPass;
+    } else {
+      seedUsers.unshift({ email: envAdminId, pass: envPass });
+    }
+  }
+
+  if (envEmail && envPass) {
+    const existing = seedUsers.find(u => u.email === envEmail);
+    if (existing) {
+      existing.pass = envPass;
+    } else {
+      seedUsers.unshift({ email: envEmail, pass: envPass });
+    }
+  }
 
   for (const u of seedUsers) {
     const checkStmt = db.prepare(`SELECT id, password_hash FROM users WHERE email = ? LIMIT 1`);
@@ -213,7 +304,7 @@ export async function initDatabase(): Promise<Database> {
       { url: 'https://quizlet.com', category: 'Working' },
     ];
     studyServers.forEach((s, idx) => {
-      const sStmt = db!.prepare(`INSERT INTO servers (id, web_app_id, url, category, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`);
+      const sStmt = db!.prepare(`INSERT INTO servers (id, web_app_id, url, category, sort_order, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)`);
       sStmt.run([crypto.randomUUID(), studyId, s.url, s.category, idx + 1, now, now]);
       sStmt.free();
     });
@@ -230,7 +321,7 @@ export async function initDatabase(): Promise<Database> {
       { url: 'https://stream-archive.invalid/test', category: 'Error' },
     ];
     movieServers.forEach((s, idx) => {
-      const sStmt = db!.prepare(`INSERT INTO servers (id, web_app_id, url, category, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`);
+      const sStmt = db!.prepare(`INSERT INTO servers (id, web_app_id, url, category, sort_order, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)`);
       sStmt.run([crypto.randomUUID(), movieId, s.url, s.category, idx + 1, now, now]);
       sStmt.free();
     });
@@ -247,7 +338,7 @@ export async function initDatabase(): Promise<Database> {
       { url: 'https://stackoverflow.com', category: 'Working' },
     ];
     toolsServers.forEach((s, idx) => {
-      const sStmt = db!.prepare(`INSERT INTO servers (id, web_app_id, url, category, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`);
+      const sStmt = db!.prepare(`INSERT INTO servers (id, web_app_id, url, category, sort_order, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)`);
       sStmt.run([crypto.randomUUID(), toolsId, s.url, s.category, idx + 1, now, now]);
       sStmt.free();
     });
@@ -279,6 +370,42 @@ export async function initDatabase(): Promise<Database> {
     console.log('[Database] Initialized default site settings');
   }
 
+  // Seed sample achievements if table is empty
+  const achieveCheck = db.exec(`SELECT id FROM achievements LIMIT 1`);
+  if (achieveCheck.length === 0 || achieveCheck[0].values.length === 0) {
+    console.log('[Database] Seeding initial sample achievements...');
+    const samples = [
+      {
+        id: crypto.randomUUID(),
+        imageUrl: 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=1000&q=80',
+        comment: 'Congratulations Ritesh! 🎉\nYour hard work and consistency have paid off.\nKeep learning and keep growing. You can achieve even more...\nProud of you! ❤️',
+        createdAt: '2025-06-20T10:00:00.000Z',
+      },
+      {
+        id: crypto.randomUUID(),
+        imageUrl: 'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=1000&q=80',
+        comment: 'Small steps every day make a big difference.\nStay consistent and keep moving forward! 💪',
+        createdAt: '2025-06-15T10:00:00.000Z',
+      },
+      {
+        id: crypto.randomUUID(),
+        imageUrl: 'https://images.unsplash.com/photo-1519834785169-98be25ec3f84?auto=format&fit=crop&w=1000&q=80',
+        comment: 'Keep going!\nSuccess is a journey, not a destination. ❤️',
+        createdAt: '2025-06-10T10:00:00.000Z',
+      },
+    ];
+
+    for (const sample of samples) {
+      const aStmt = db.prepare(`
+        INSERT INTO achievements (id, image_url, comment, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?)
+      `);
+      aStmt.run([sample.id, sample.imageUrl, sample.comment, sample.createdAt, sample.createdAt]);
+      aStmt.free();
+    }
+    console.log('[Database] Initialized default sample achievements');
+  }
+
   saveDb();
   return db;
 }
@@ -306,20 +433,21 @@ export function getPublicWebApps() {
 
   // Fetch servers for all apps ordered by sort_order
   const serversRes = database.exec(`
-    SELECT id, web_app_id, category, sort_order 
+    SELECT id, web_app_id, category, sort_order, is_active 
     FROM servers 
     ORDER BY sort_order ASC, created_at ASC
   `);
 
-  const serversByApp: Record<string, Array<{ id: string; category: string; order: number }>> = {};
+  const serversByApp: Record<string, Array<{ id: string; category: string; order: number; isActive: boolean }>> = {};
   if (serversRes.length > 0) {
     serversRes[0].values.forEach(row => {
       const serverId = String(row[0]);
       const appId = String(row[1]);
       const category = String(row[2]);
       const order = Number(row[3]);
+      const isActive = row[4] !== undefined && row[4] !== null ? Number(row[4]) !== 0 : true;
       if (!serversByApp[appId]) serversByApp[appId] = [];
-      serversByApp[appId].push({ id: serverId, category, order });
+      serversByApp[appId].push({ id: serverId, category, order, isActive });
     });
   }
 
@@ -330,6 +458,7 @@ export function getPublicWebApps() {
       id: s.id,
       name: `Server ${index + 1}`,
       category: s.category,
+      isActive: s.isActive,
     }));
     return {
       id: app.id,
@@ -340,18 +469,57 @@ export function getPublicWebApps() {
   });
 }
 
-// Launch server URL lookup (used when user clicks server in modal)
-export function getServerLaunchUrl(webAppId: string, serverId: string): string | null {
+// Detailed server launch info lookup (includes isActive validation)
+export function getServerLaunchInfo(webAppId: string, serverId: string): { url: string; isActive: boolean } | null {
   const database = getDb();
-  const stmt = database.prepare(`SELECT url FROM servers WHERE id = ? AND web_app_id = ? LIMIT 1`);
+  const stmt = database.prepare(`SELECT url, is_active FROM servers WHERE id = ? AND web_app_id = ? LIMIT 1`);
   stmt.bind([serverId, webAppId]);
   if (stmt.step()) {
     const row = stmt.get();
     stmt.free();
-    return String(row[0]);
+    return {
+      url: String(row[0]),
+      isActive: row[1] !== undefined && row[1] !== null ? Number(row[1]) !== 0 : true,
+    };
   }
   stmt.free();
   return null;
+}
+
+// Launch server URL lookup (used when user clicks server in modal - checks isActive)
+export function getServerLaunchUrl(webAppId: string, serverId: string): string | null {
+  const info = getServerLaunchInfo(webAppId, serverId);
+  if (!info || !info.isActive) {
+    return null;
+  }
+  return info.url;
+}
+
+// Toggle or set server isActive status independently
+export function toggleServerStatus(serverId: string, isActive?: boolean): { id: string; isActive: boolean } | null {
+  const database = getDb();
+  const stmt = database.prepare(`SELECT id, is_active FROM servers WHERE id = ? LIMIT 1`);
+  stmt.bind([serverId]);
+  if (!stmt.step()) {
+    stmt.free();
+    return null;
+  }
+  const row = stmt.get();
+  stmt.free();
+
+  const currentActive = row[1] !== undefined && row[1] !== null ? Number(row[1]) !== 0 : true;
+  const newActive = isActive !== undefined ? (isActive ? 1 : 0) : (currentActive ? 0 : 1);
+  const now = new Date().toISOString();
+
+  const updateStmt = database.prepare(`UPDATE servers SET is_active = ?, updated_at = ? WHERE id = ?`);
+  updateStmt.run([newActive, now, serverId]);
+  updateStmt.free();
+  saveDb();
+
+  return {
+    id: serverId,
+    isActive: newActive === 1,
+  };
 }
 
 // Admin stats
@@ -404,7 +572,7 @@ export function getAdminWebApps() {
   }));
 
   const serversRes = database.exec(`
-    SELECT id, web_app_id, url, category, sort_order, created_at, updated_at 
+    SELECT id, web_app_id, url, category, sort_order, is_active, created_at, updated_at 
     FROM servers 
     ORDER BY sort_order ASC, created_at ASC
   `);
@@ -420,8 +588,9 @@ export function getAdminWebApps() {
         url: String(row[2]),
         category: String(row[3]),
         sortOrder: Number(row[4]),
-        createdAt: String(row[5]),
-        updatedAt: String(row[6]),
+        isActive: row[5] !== undefined && row[5] !== null ? Number(row[5]) !== 0 : true,
+        createdAt: String(row[6]),
+        updatedAt: String(row[7]),
       });
     });
   }
@@ -454,7 +623,7 @@ export function getAdminWebAppById(id: string) {
   };
 
   const sStmt = database.prepare(`
-    SELECT id, web_app_id, url, category, sort_order, created_at, updated_at 
+    SELECT id, web_app_id, url, category, sort_order, is_active, created_at, updated_at 
     FROM servers 
     WHERE web_app_id = ? 
     ORDER BY sort_order ASC, created_at ASC
@@ -468,8 +637,9 @@ export function getAdminWebAppById(id: string) {
       url: String(sRow[2]),
       category: String(sRow[3]),
       sortOrder: Number(sRow[4]),
-      createdAt: String(sRow[5]),
-      updatedAt: String(sRow[6]),
+      isActive: sRow[5] !== undefined && sRow[5] !== null ? Number(sRow[5]) !== 0 : true,
+      createdAt: String(sRow[6]),
+      updatedAt: String(sRow[7]),
     });
   }
   sStmt.free();
@@ -478,7 +648,7 @@ export function getAdminWebAppById(id: string) {
 }
 
 // Admin Create Web App with servers
-export function createWebApp(name: string, icon: string, servers: Array<{ url: string; category: string }>) {
+export function createWebApp(name: string, icon: string, servers: Array<{ url: string; category: string; isActive?: boolean }>) {
   const database = getDb();
   const appId = crypto.randomUUID();
   const now = new Date().toISOString();
@@ -490,8 +660,9 @@ export function createWebApp(name: string, icon: string, servers: Array<{ url: s
     appStmt.free();
 
     servers.forEach((s, idx) => {
-      const sStmt = database.prepare(`INSERT INTO servers (id, web_app_id, url, category, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`);
-      sStmt.run([crypto.randomUUID(), appId, s.url, s.category, idx + 1, now, now]);
+      const sStmt = database.prepare(`INSERT INTO servers (id, web_app_id, url, category, sort_order, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+      const activeVal = s.isActive !== false ? 1 : 0;
+      sStmt.run([crypto.randomUUID(), appId, s.url, s.category, idx + 1, activeVal, now, now]);
       sStmt.free();
     });
 
@@ -505,7 +676,7 @@ export function createWebApp(name: string, icon: string, servers: Array<{ url: s
 }
 
 // Admin Update Web App and its servers
-export function updateWebApp(id: string, name: string, icon: string, servers: Array<{ id?: string; url: string; category: string }>) {
+export function updateWebApp(id: string, name: string, icon: string, servers: Array<{ id?: string; url: string; category: string; isActive?: boolean }>) {
   const database = getDb();
   const now = new Date().toISOString();
 
@@ -523,8 +694,9 @@ export function updateWebApp(id: string, name: string, icon: string, servers: Ar
 
     servers.forEach((s, idx) => {
       const serverId = s.id || crypto.randomUUID();
-      const sStmt = database.prepare(`INSERT INTO servers (id, web_app_id, url, category, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`);
-      sStmt.run([serverId, id, s.url, s.category, idx + 1, now, now]);
+      const activeVal = s.isActive !== false ? 1 : 0;
+      const sStmt = database.prepare(`INSERT INTO servers (id, web_app_id, url, category, sort_order, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+      sStmt.run([serverId, id, s.url, s.category, idx + 1, activeVal, now, now]);
       sStmt.free();
     });
 
@@ -707,4 +879,183 @@ export function updateSiteSettings(payload: {
 
   saveDb();
   return getSiteSettings();
+}
+
+// ==========================================
+// ACHIEVEMENTS & ACHIEVEMENT MESSAGE CRUD
+// ==========================================
+
+export interface AchievementRecord {
+  id: string;
+  imageUrl: string;
+  comment: string;
+  isPinned: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AchievementMessageRecord {
+  title: string;
+  content: string;
+  updatedAt: string;
+}
+
+export function getAchievementMessage(): AchievementMessageRecord {
+  const database = getDb();
+  const res = database.exec(`SELECT title, content, updated_at FROM achievement_message WHERE id = 'default' LIMIT 1`);
+  if (res.length === 0 || res[0].values.length === 0) {
+    return {
+      title: 'Important Message',
+      content: '',
+      updatedAt: new Date().toISOString(),
+    };
+  }
+  const row = res[0].values[0];
+  return {
+    title: String(row[0] || 'Important Message'),
+    content: String(row[1] || ''),
+    updatedAt: String(row[2] || ''),
+  };
+}
+
+export function updateAchievementMessage(title?: string, content?: string): AchievementMessageRecord {
+  const database = getDb();
+  const existing = getAchievementMessage();
+  const newTitle = title !== undefined ? String(title).trim() : existing.title;
+  const newContent = content !== undefined ? String(content).trim() : existing.content;
+  const now = new Date().toISOString();
+
+  const stmt = database.prepare(`
+    INSERT INTO achievement_message (id, title, content, updated_at)
+    VALUES ('default', ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET title = excluded.title, content = excluded.content, updated_at = excluded.updated_at
+  `);
+  stmt.run([newTitle, newContent, now]);
+  stmt.free();
+  saveDb();
+
+  return {
+    title: newTitle,
+    content: newContent,
+    updatedAt: now,
+  };
+}
+
+export function getPublicAchievements(): AchievementRecord[] {
+  const database = getDb();
+  const res = database.exec(`SELECT id, image_url, comment, is_pinned, created_at, updated_at FROM achievements ORDER BY is_pinned DESC, created_at DESC`);
+  if (res.length === 0) return [];
+  return res[0].values.map(row => ({
+    id: String(row[0]),
+    imageUrl: String(row[1]),
+    comment: String(row[2]),
+    isPinned: Number(row[3]) === 1,
+    createdAt: String(row[4]),
+    updatedAt: String(row[5]),
+  }));
+}
+
+export function getAdminAchievements(): AchievementRecord[] {
+  return getPublicAchievements();
+}
+
+export function getAchievementById(id: string): AchievementRecord | null {
+  const database = getDb();
+  const stmt = database.prepare(`SELECT id, image_url, comment, is_pinned, created_at, updated_at FROM achievements WHERE id = ? LIMIT 1`);
+  stmt.bind([id]);
+  if (stmt.step()) {
+    const row = stmt.get();
+    stmt.free();
+    return {
+      id: String(row[0]),
+      imageUrl: String(row[1]),
+      comment: String(row[2]),
+      isPinned: Number(row[3]) === 1,
+      createdAt: String(row[4]),
+      updatedAt: String(row[5]),
+    };
+  }
+  stmt.free();
+  return null;
+}
+
+export function createAchievement(imageUrl: string, comment: string, isPinned: boolean = false): AchievementRecord {
+  const database = getDb();
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+
+  const stmt = database.prepare(`
+    INSERT INTO achievements (id, image_url, comment, is_pinned, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `);
+  stmt.run([id, imageUrl, comment, isPinned ? 1 : 0, now, now]);
+  stmt.free();
+  saveDb();
+
+  return {
+    id,
+    imageUrl,
+    comment,
+    isPinned: Boolean(isPinned),
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+export function updateAchievement(id: string, imageUrl: string, comment: string, isPinned?: boolean): AchievementRecord | null {
+  const database = getDb();
+  const existing = getAchievementById(id);
+  if (!existing) return null;
+
+  const finalPinned = isPinned !== undefined ? (isPinned ? 1 : 0) : (existing.isPinned ? 1 : 0);
+  const now = new Date().toISOString();
+  const stmt = database.prepare(`
+    UPDATE achievements
+    SET image_url = ?, comment = ?, is_pinned = ?, updated_at = ?
+    WHERE id = ?
+  `);
+  stmt.run([imageUrl, comment, finalPinned, now, id]);
+  stmt.free();
+  saveDb();
+
+  return {
+    id,
+    imageUrl,
+    comment,
+    isPinned: finalPinned === 1,
+    createdAt: existing.createdAt,
+    updatedAt: now,
+  };
+}
+
+export function toggleAchievementPin(id: string, isPinned?: boolean): AchievementRecord | null {
+  const database = getDb();
+  const existing = getAchievementById(id);
+  if (!existing) return null;
+
+  const newPinned = isPinned !== undefined ? Boolean(isPinned) : !existing.isPinned;
+  const now = new Date().toISOString();
+  const stmt = database.prepare(`
+    UPDATE achievements
+    SET is_pinned = ?, updated_at = ?
+    WHERE id = ?
+  `);
+  stmt.run([newPinned ? 1 : 0, now, id]);
+  stmt.free();
+  saveDb();
+
+  return {
+    ...existing,
+    isPinned: newPinned,
+    updatedAt: now,
+  };
+}
+
+export function deleteAchievement(id: string): boolean {
+  const database = getDb();
+  const stmt = database.prepare(`DELETE FROM achievements WHERE id = ?`);
+  stmt.run([id]);
+  stmt.free();
+  saveDb();
+  return true;
 }

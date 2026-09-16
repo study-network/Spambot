@@ -4,6 +4,7 @@ export interface PublicServer {
   id: string;
   name: string; // Dynamic "Server 1", "Server 2", etc.
   category: ServerCategory;
+  isActive: boolean;
 }
 
 export interface PublicWebApp {
@@ -19,6 +20,7 @@ export interface AdminServer {
   url: string;
   category: ServerCategory;
   sortOrder: number;
+  isActive: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -65,5 +67,20 @@ export interface SiteSettings {
   messageTitle?: string;
   messageContent?: string;
   createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface Achievement {
+  id: string;
+  imageUrl: string;
+  comment: string;
+  isPinned: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AchievementMessage {
+  title: string;
+  content: string;
   updatedAt?: string;
 }

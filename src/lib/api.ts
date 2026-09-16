@@ -3,7 +3,9 @@ import {
   AdminWebApp, 
   DashboardStats, 
   AuthResponse,
-  SiteSettings
+  SiteSettings,
+  Achievement,
+  AchievementMessage,
 } from '../types.ts';
 
 const TOKEN_KEY = 'web_app_admin_token';
@@ -131,7 +133,7 @@ export async function fetchAdminWebApps(): Promise<AdminWebApp[]> {
 export async function createAdminWebApp(payload: {
   name: string;
   icon: string;
-  servers: Array<{ url: string; category: string }>;
+  servers: Array<{ url: string; category: string; isActive?: boolean }>;
 }): Promise<AdminWebApp> {
   const res = await fetch('/api/admin/webapps', {
     method: 'POST',
@@ -150,7 +152,7 @@ export async function updateAdminWebApp(
   payload: {
     name: string;
     icon: string;
-    servers: Array<{ id?: string; url: string; category: string }>;
+    servers: Array<{ id?: string; url: string; category: string; isActive?: boolean }>;
   }
 ): Promise<AdminWebApp> {
   const res = await fetch(`/api/admin/webapps/${encodeURIComponent(id)}`, {
@@ -161,6 +163,19 @@ export async function updateAdminWebApp(
   const data = await res.json();
   if (!res.ok) {
     throw new Error(data.error || 'Failed to update web app');
+  }
+  return data;
+}
+
+export async function updateServerStatus(serverId: string, isActive: boolean): Promise<{ id: string; isActive: boolean }> {
+  const res = await fetch(`/api/admin/servers/${encodeURIComponent(serverId)}/status`, {
+    method: 'PATCH',
+    headers: getHeaders(true),
+    body: JSON.stringify({ isActive }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || 'Failed to update server status');
   }
   return data;
 }
@@ -206,4 +221,104 @@ export async function saveAdminSettings(settings: Partial<SiteSettings>): Promis
     throw new Error(data.error || 'Failed to save site settings');
   }
   return data;
+}
+
+// Achievements API
+export async function fetchPublicAchievements(): Promise<Achievement[]> {
+  const res = await fetch('/api/achievements');
+  if (!res.ok) {
+    throw new Error('Failed to fetch achievements');
+  }
+  return res.json();
+}
+
+export async function fetchPublicAchievementMessage(): Promise<AchievementMessage> {
+  const res = await fetch('/api/achievements/message');
+  if (!res.ok) {
+    throw new Error('Failed to fetch achievement message');
+  }
+  return res.json();
+}
+
+export async function fetchAdminAchievements(): Promise<Achievement[]> {
+  const res = await fetch('/api/admin/achievements', {
+    headers: getHeaders(true),
+  });
+  if (!res.ok) {
+    throw new Error('Failed to fetch admin achievements');
+  }
+  return res.json();
+}
+
+export async function fetchAdminAchievementMessage(): Promise<AchievementMessage> {
+  const res = await fetch('/api/admin/achievements/message', {
+    headers: getHeaders(true),
+  });
+  if (!res.ok) {
+    throw new Error('Failed to fetch admin achievement message');
+  }
+  return res.json();
+}
+
+export async function saveAdminAchievementMessage(payload: { title: string; content: string }): Promise<AchievementMessage> {
+  const res = await fetch('/api/admin/achievements/message', {
+    method: 'PUT',
+    headers: getHeaders(true),
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || 'Failed to save achievement message');
+  }
+  return data;
+}
+
+export async function createAchievement(payload: { imageUrl: string; comment: string; isPinned?: boolean }): Promise<Achievement> {
+  const res = await fetch('/api/admin/achievements', {
+    method: 'POST',
+    headers: getHeaders(true),
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || 'Failed to create achievement');
+  }
+  return data;
+}
+
+export async function updateAchievement(id: string, payload: { imageUrl: string; comment: string; isPinned?: boolean }): Promise<Achievement> {
+  const res = await fetch(`/api/admin/achievements/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: getHeaders(true),
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || 'Failed to update achievement');
+  }
+  return data;
+}
+
+export async function toggleAchievementPin(id: string, isPinned?: boolean): Promise<Achievement> {
+  const res = await fetch(`/api/admin/achievements/${encodeURIComponent(id)}/pin`, {
+    method: 'POST',
+    headers: getHeaders(true),
+    body: JSON.stringify({ isPinned }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || 'Failed to update pin status');
+  }
+  return data;
+}
+
+export async function deleteAchievement(id: string): Promise<void> {
+  const res = await fetch(`/api/admin/achievements/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: getHeaders(true),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Failed to delete achievement');
+  }
 }

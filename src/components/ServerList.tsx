@@ -22,6 +22,13 @@ export const ServerList: React.FC<ServerListProps> = ({
   const handleServerClick = async (server: PublicServer) => {
     if (launchingId) return;
 
+    if (!server.isActive) {
+      if (onError) {
+        onError(`${server.name} is currently inactive and cannot be launched.`);
+      }
+      return;
+    }
+
     try {
       setLaunchingId(server.id);
       const url = await launchServer(webAppId, server.id);
@@ -69,9 +76,13 @@ export const ServerList: React.FC<ServerListProps> = ({
             key={server.id}
             id={`server-btn-${server.id}`}
             type="button"
-            disabled={isLaunching}
+            disabled={isLaunching || !server.isActive}
             onClick={() => handleServerClick(server)}
-            className="group w-full flex items-center justify-between p-3.5 bg-neutral-50 dark:bg-neutral-800/60 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-xl border border-neutral-200/70 dark:border-neutral-700/60 transition-all text-left cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 min-h-[52px]"
+            className={`group w-full flex items-center justify-between p-3.5 rounded-xl border transition-all text-left min-h-[52px] ${
+              server.isActive
+                ? 'bg-neutral-50 dark:bg-neutral-800/60 hover:bg-neutral-100 dark:hover:bg-neutral-800 border-neutral-200/70 dark:border-neutral-700/60 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500'
+                : 'bg-neutral-100/60 dark:bg-neutral-900/40 border-neutral-200/50 dark:border-neutral-800/50 opacity-75 cursor-not-allowed'
+            }`}
           >
             {/* Left: Server Name (Server 1, Server 2, etc.) */}
             <div className="flex items-center gap-3">
@@ -82,21 +93,32 @@ export const ServerList: React.FC<ServerListProps> = ({
                 <span className="font-semibold text-neutral-900 dark:text-neutral-100 text-sm sm:text-base group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
                   {server.name}
                 </span>
-                <span className="block text-[11px] text-neutral-400 dark:text-neutral-500">
-                  Click to launch safely
-                </span>
+                {/* Category • Active / Inactive on the same line, smaller than server name */}
+                <div className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
+                  <span>{server.category} • </span>
+                  <span className={server.isActive ? 'text-emerald-600 dark:text-emerald-400 font-medium' : 'text-neutral-400 dark:text-neutral-500 font-medium'}>
+                    {server.isActive ? 'Active' : 'Inactive'}
+                  </span>
+                </div>
               </div>
             </div>
 
-            {/* Right: Category badge + Action status icon */}
+            {/* Right: Category badge with status + Action icon */}
             <div className="flex items-center gap-3">
-              <CategoryBadge category={server.category} />
+              <CategoryBadge 
+                category={server.category} 
+                status={server.isActive ? 'Active' : 'Inactive'} 
+              />
               
               <div className="text-neutral-400 group-hover:text-indigo-600 dark:text-neutral-500 dark:group-hover:text-indigo-400 transition-colors">
                 {isLaunching ? (
                   <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />
-                ) : (
+                ) : server.isActive ? (
                   <ExternalLink className="w-4 h-4 opacity-70 group-hover:opacity-100 transition-opacity" />
+                ) : (
+                  <span className="text-[11px] font-bold text-neutral-400 dark:text-neutral-500 px-1.5 py-0.5 rounded bg-neutral-200/60 dark:bg-neutral-700/60">
+                    OFF
+                  </span>
                 )}
               </div>
             </div>

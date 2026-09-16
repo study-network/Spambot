@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Send, MessageCircle, Info, Sparkles, ExternalLink, Megaphone } from 'lucide-react';
+import { X, Send, MessageCircle, Info, Sparkles, ExternalLink, Megaphone, Trophy } from 'lucide-react';
 import { SiteSettings } from '../types.ts';
 
 interface NavigationDrawerProps {
@@ -8,6 +8,7 @@ interface NavigationDrawerProps {
   onClose: () => void;
   settings: SiteSettings | null;
   onOpenAbout: () => void;
+  onOpenAchievements: () => void;
 }
 
 export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
@@ -15,6 +16,7 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
   onClose,
   settings,
   onOpenAbout,
+  onOpenAchievements,
 }) => {
   // Close drawer on Escape key
   useEffect(() => {
@@ -157,7 +159,35 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
                   <ExternalLink className="w-4 h-4 text-neutral-400 group-hover:text-emerald-500 transition-colors" />
                 </button>
 
-                {/* 3. About Us Item */}
+                {/* 3. User's Achievement Item */}
+                <button
+                  id="drawer-item-achievements"
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onOpenAchievements();
+                  }}
+                  className="w-full group flex items-center justify-between p-3.5 rounded-2xl border border-neutral-200/80 dark:border-neutral-800 bg-white dark:bg-neutral-800/60 hover:border-amber-300 dark:hover:border-amber-700 hover:bg-amber-50/40 dark:hover:bg-amber-950/20 shadow-xs transition-all text-left cursor-pointer"
+                >
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-10 h-10 rounded-xl bg-amber-500/10 dark:bg-amber-500/20 text-amber-500 flex items-center justify-center shadow-xs">
+                      <Trophy className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <span className="font-semibold text-sm text-neutral-900 dark:text-neutral-100 block">
+                        User's Achievement
+                      </span>
+                      <span className="text-[11px] text-neutral-500 dark:text-neutral-400">
+                        See what our users have achieved
+                      </span>
+                    </div>
+                  </div>
+                  <span className="text-xs font-semibold text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/80">
+                    View
+                  </span>
+                </button>
+
+                {/* 4. About Us Item */}
                 <button
                   id="drawer-item-about"
                   type="button"

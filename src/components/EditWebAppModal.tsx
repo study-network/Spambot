@@ -9,6 +9,7 @@ interface ServerEditDraft {
   tempId: string;
   url: string;
   category: ServerCategory;
+  isActive: boolean;
 }
 
 interface EditWebAppModalProps {
@@ -20,7 +21,7 @@ interface EditWebAppModalProps {
     payload: {
       name: string;
       icon: string;
-      servers: Array<{ id?: string; url: string; category: ServerCategory }>;
+      servers: Array<{ id?: string; url: string; category: ServerCategory; isActive?: boolean }>;
     }
   ) => Promise<void>;
 }
@@ -69,6 +70,7 @@ export const EditWebAppModal: React.FC<EditWebAppModalProps> = ({
           tempId: s.id || `temp-${idx}`,
           url: s.url,
           category: s.category,
+          isActive: s.isActive !== false,
         }))
       );
       setError(null);
@@ -102,8 +104,16 @@ export const EditWebAppModal: React.FC<EditWebAppModalProps> = ({
   const handleAddServer = () => {
     setServers(prev => [
       ...prev,
-      { tempId: 'server-' + Date.now() + Math.random(), url: '', category: 'Working' },
+      { tempId: 'server-' + Date.now() + Math.random(), url: '', category: 'Working', isActive: true },
     ]);
+  };
+
+  const handleToggleServer = (index: number) => {
+    setServers(prev => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], isActive: !copy[index].isActive };
+      return copy;
+    });
   };
 
   const handleRemoveServer = (index: number) => {
@@ -184,6 +194,7 @@ export const EditWebAppModal: React.FC<EditWebAppModalProps> = ({
           id: s.id,
           url: s.url.trim(),
           category: s.category,
+          isActive: s.isActive,
         })),
       });
       onClose();
@@ -399,6 +410,21 @@ export const EditWebAppModal: React.FC<EditWebAppModalProps> = ({
                             {derivedName}
                           </span>
                           <CategoryBadge category={server.category} size="sm" showIcon={false} />
+
+                          {/* ON / OFF Toggle */}
+                          <button
+                            id={`edit-modal-toggle-server-${index}`}
+                            type="button"
+                            onClick={() => handleToggleServer(index)}
+                            title={`Turn ${derivedName} ${server.isActive ? 'OFF' : 'ON'}`}
+                            className={`px-2.5 py-0.5 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                              server.isActive
+                                ? 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-xs'
+                                : 'bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300'
+                            }`}
+                          >
+                            {server.isActive ? 'ON' : 'OFF'}
+                          </button>
                         </div>
 
                         <div className="flex items-center gap-1">

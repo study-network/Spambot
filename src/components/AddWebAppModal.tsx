@@ -8,6 +8,7 @@ interface ServerDraft {
   tempId: string;
   url: string;
   category: ServerCategory;
+  isActive: boolean;
 }
 
 interface AddWebAppModalProps {
@@ -16,7 +17,7 @@ interface AddWebAppModalProps {
   onSave: (payload: {
     name: string;
     icon: string;
-    servers: Array<{ url: string; category: ServerCategory }>;
+    servers: Array<{ url: string; category: ServerCategory; isActive?: boolean }>;
   }) => Promise<void>;
 }
 
@@ -41,7 +42,7 @@ export const AddWebAppModal: React.FC<AddWebAppModalProps> = ({
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
 
   const [servers, setServers] = useState<ServerDraft[]>([
-    { tempId: 'initial-1', url: '', category: 'Working' },
+    { tempId: 'initial-1', url: '', category: 'Working', isActive: true },
   ]);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -74,8 +75,16 @@ export const AddWebAppModal: React.FC<AddWebAppModalProps> = ({
   const handleAddServer = () => {
     setServers(prev => [
       ...prev,
-      { tempId: 'server-' + Date.now() + Math.random(), url: '', category: 'Working' },
+      { tempId: 'server-' + Date.now() + Math.random(), url: '', category: 'Working', isActive: true },
     ]);
+  };
+
+  const handleToggleServer = (index: number) => {
+    setServers(prev => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], isActive: !copy[index].isActive };
+      return copy;
+    });
   };
 
   const handleRemoveServer = (index: number) => {
@@ -153,13 +162,14 @@ export const AddWebAppModal: React.FC<AddWebAppModalProps> = ({
         servers: servers.map(s => ({
           url: s.url.trim(),
           category: s.category,
+          isActive: s.isActive,
         })),
       });
       // Reset & close
       setName('');
       setIconUrl('');
       setUploadedImage(null);
-      setServers([{ tempId: 'initial-1', url: '', category: 'Working' }]);
+      setServers([{ tempId: 'initial-1', url: '', category: 'Working', isActive: true }]);
       onClose();
     } catch (err: any) {
       setError(err.message || 'Failed to create Web App');
@@ -376,6 +386,21 @@ export const AddWebAppModal: React.FC<AddWebAppModalProps> = ({
                             {derivedName}
                           </span>
                           <CategoryBadge category={server.category} size="sm" showIcon={false} />
+
+                          {/* ON / OFF Toggle */}
+                          <button
+                            id={`add-modal-toggle-server-${index}`}
+                            type="button"
+                            onClick={() => handleToggleServer(index)}
+                            title={`Turn ${derivedName} ${server.isActive ? 'OFF' : 'ON'}`}
+                            className={`px-2.5 py-0.5 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                              server.isActive
+                                ? 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-xs'
+                                : 'bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300'
+                            }`}
+                          >
+                            {server.isActive ? 'ON' : 'OFF'}
+                          </button>
                         </div>
 
                         {/* Reorder and Delete Controls */}

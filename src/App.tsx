@@ -5,7 +5,9 @@ import {
   DashboardStats, 
   ServerCategory,
   AuthResponse,
-  SiteSettings
+  SiteSettings,
+  Achievement,
+  AchievementMessage,
 } from './types.ts';
 import { 
   fetchPublicWebApps, 
@@ -14,13 +16,21 @@ import {
   createAdminWebApp, 
   updateAdminWebApp, 
   deleteAdminWebApp,
+  updateServerStatus,
   fetchSiteSettings,
   fetchAdminSettings,
   saveAdminSettings,
   getAuthToken,
   getStoredUser,
   setAuthSession,
-  checkAuthMe
+  checkAuthMe,
+  fetchPublicAchievements,
+  fetchPublicAchievementMessage,
+  saveAdminAchievementMessage,
+  toggleAchievementPin,
+  createAchievement,
+  updateAchievement,
+  deleteAchievement
 } from './lib/api.ts';
 import { WebAppCard } from './components/WebAppCard.tsx';
 import { ServerModal } from './components/ServerModal.tsx';
@@ -32,6 +42,8 @@ import { ConfirmDialog } from './components/ConfirmDialog.tsx';
 import { ToastContainer, ToastMessage } from './components/Toast.tsx';
 import { NavigationDrawer } from './components/NavigationDrawer.tsx';
 import { AboutUsModal } from './components/AboutUsModal.tsx';
+import { AchievementModal } from './components/AchievementModal.tsx';
+import { AchievementFormModal } from './components/AchievementFormModal.tsx';
 import { 
   AppWindow, 
   Search, 
@@ -70,6 +82,16 @@ export default function App() {
   const [deletingApp, setDeletingApp] = useState<AdminWebApp | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // User's Achievements State
+  const [achievements, setAchievements] = useState<Achievement[]>([]);
+  const [achievementMessage, setAchievementMessage] = useState<AchievementMessage | null>(null);
+  const [isLoadingAchievements, setIsLoadingAchievements] = useState<boolean>(false);
+  const [isAchievementViewerOpen, setIsAchievementViewerOpen] = useState<boolean>(false);
+  const [isAchievementFormOpen, setIsAchievementFormOpen] = useState<boolean>(false);
+  const [editingAchievement, setEditingAchievement] = useState<Achievement | null>(null);
+  const [deletingAchievementId, setDeletingAchievementId] = useState<string | null>(null);
+  const [isDeletingAchievement, setIsDeletingAchievement] = useState<boolean>(false);
+
   // Toast Notifications
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
@@ -95,6 +117,29 @@ export default function App() {
     }
   }, []);
 
+  // Load achievements
+  const loadAchievements = useCallback(async () => {
+    try {
+      setIsLoadingAchievements(true);
+      const data = await fetchPublicAchievements();
+      setAchievements(data);
+    } catch (err: any) {
+      console.error('Failed to load achievements:', err);
+    } finally {
+      setIsLoadingAchievements(false);
+    }
+  }, []);
+
+  // Load achievement message
+  const loadAchievementMessage = useCallback(async () => {
+    try {
+      const msg = await fetchPublicAchievementMessage();
+      setAchievementMessage(msg);
+    } catch (err: any) {
+      console.error('Failed to load achievement message:', err);
+    }
+  }, []);
+
   // Load public data
   const loadPublicData = useCallback(async () => {
     try {
@@ -102,6 +147,8 @@ export default function App() {
       const [apps] = await Promise.all([
         fetchPublicWebApps(),
         loadSettings(),
+        loadAchievements(),
+        loadAchievementMessage(),
       ]);
       setPublicApps(apps);
     } catch (err: any) {
@@ -110,7 +157,7 @@ export default function App() {
     } finally {
       setIsLoadingPublic(false);
     }
-  }, [loadSettings]);
+  }, [loadSettings, loadAchievements, loadAchievementMessage]);
 
   // Load admin data
   const loadAdminData = useCallback(async () => {
@@ -121,6 +168,8 @@ export default function App() {
         fetchAdminWebApps(),
         fetchAdminStats(),
         fetchAdminSettings().catch(() => null),
+        loadAchievements(),
+        loadAchievementMessage(),
       ]);
       setAdminApps(apps);
       setAdminStats(stats);
@@ -139,7 +188,7 @@ export default function App() {
     } finally {
       setIsLoadingAdmin(false);
     }
-  }, []);
+  }, [loadAchievements, loadAchievementMessage]);
 
   // Initial authentication check & URL hash listener
   useEffect(() => {
@@ -260,6 +309,94 @@ export default function App() {
     addToast('success', 'Site settings updated successfully!');
   };
 
+  // Toggle Server Status (Admin only)
+  const handleToggleServerStatus = async (appId: string, serverId: string, newStatus: boolean) => {
+    try {
+      // Optimistic update for snappy UI
+      setAdminApps(prev => prev.map(app => {
+        if (app.id !== appId) return app;
+        return {
+          ...app,
+          servers: app.servers.map(s => s.id === serverId ? { ...s, isActive: newStatus } : s),
+        };
+      }));
+
+      await updateServerStatus(serverId, newStatus);
+      addToast('success', `Server status updated: ${newStatus ? 'Active (ON)' : 'Inactive (OFF)'}`);
+
+      // Sync stats & public view silently
+      loadAdminData();
+      fetchPublicWebApps().then(setPublicApps).catch(() => {});
+    } catch (err: any) {
+      console.error('Failed to update server status:', err);
+      addToast('error', err.message || 'Failed to update server status');
+      loadAdminData();
+    }
+  };
+
+  // Create or Update Achievement (Admin only)
+  const handleSaveAchievement = async (payload: { imageUrl: string; comment: string; isPinned?: boolean }) => {
+    try {
+      if (editingAchievement) {
+        await updateAchievement(editingAchievement.id, payload);
+        addToast('success', 'Achievement updated successfully!');
+      } else {
+        await createAchievement(payload);
+        addToast('success', 'Achievement published successfully!');
+      }
+      setIsAchievementFormOpen(false);
+      setEditingAchievement(null);
+      await loadAchievements();
+    } catch (err: any) {
+      console.error('Failed to save achievement:', err);
+      addToast('error', err.message || 'Failed to save achievement');
+      throw err;
+    }
+  };
+
+  // Save Achievement Message (Admin only)
+  const handleSaveAchievementMessage = async (payload: { title: string; content: string }) => {
+    try {
+      const updated = await saveAdminAchievementMessage(payload);
+      setAchievementMessage(updated);
+      addToast('success', 'Achievement message saved successfully!');
+    } catch (err: any) {
+      console.error('Failed to save achievement message:', err);
+      addToast('error', err.message || 'Failed to save achievement message');
+      throw err;
+    }
+  };
+
+  // Pin / Unpin Achievement (Admin only)
+  const handleTogglePinAchievement = async (id: string, isPinned: boolean) => {
+    try {
+      await toggleAchievementPin(id, isPinned);
+      addToast('success', isPinned ? 'Achievement pinned to top!' : 'Achievement unpinned.');
+      await loadAchievements();
+    } catch (err: any) {
+      console.error('Failed to toggle achievement pin:', err);
+      addToast('error', err.message || 'Failed to update pin status');
+      throw err;
+    }
+  };
+
+  // Confirm Delete Achievement (Admin only)
+  const handleConfirmDeleteAchievement = async () => {
+    if (!deletingAchievementId) return;
+    try {
+      setIsDeletingAchievement(true);
+      await deleteAchievement(deletingAchievementId);
+      addToast('success', 'Achievement deleted successfully.');
+      setDeletingAchievementId(null);
+      await loadAchievements();
+    } catch (err: any) {
+      console.error('Failed to delete achievement:', err);
+      addToast('error', err.message || 'Failed to delete achievement');
+    } finally {
+      setIsDeletingAchievement(false);
+    }
+  };
+
   // Filter public apps
   const filteredPublicApps = publicApps.filter(app =>
     app.name.toLowerCase().includes(publicSearchQuery.toLowerCase())
@@ -285,12 +422,27 @@ export default function App() {
           webApps={adminApps}
           settings={siteSettings}
           onSaveSettings={handleSaveSettings}
+          achievements={achievements}
+          achievementsLoading={isLoadingAchievements}
+          onOpenAddAchievement={() => {
+            setEditingAchievement(null);
+            setIsAchievementFormOpen(true);
+          }}
+          onOpenEditAchievement={(item) => {
+            setEditingAchievement(item);
+            setIsAchievementFormOpen(true);
+          }}
+          onDeleteAchievement={(id) => setDeletingAchievementId(id)}
+          achievementMessage={achievementMessage}
+          onSaveAchievementMessage={handleSaveAchievementMessage}
+          onTogglePinAchievement={handleTogglePinAchievement}
           adminEmail={currentUser?.email}
           onOpenAdd={() => setIsAddOpen(true)}
           onOpenEdit={(app) => setEditingApp(app)}
           onOpenDelete={(app) => setDeletingApp(app)}
           onLogout={handleLogout}
           onSwitchToPublic={() => switchView('public')}
+          onToggleServerStatus={handleToggleServerStatus}
         />
       )}
 
@@ -466,6 +618,7 @@ export default function App() {
         onClose={() => setIsDrawerOpen(false)}
         settings={siteSettings}
         onOpenAbout={() => setIsAboutOpen(true)}
+        onOpenAchievements={() => setIsAchievementViewerOpen(true)}
       />
 
       {/* ABOUT US MODAL */}
@@ -473,6 +626,39 @@ export default function App() {
         isOpen={isAboutOpen}
         onClose={() => setIsAboutOpen(false)}
         settings={siteSettings}
+      />
+
+      {/* USER'S ACHIEVEMENT MODAL (PUBLIC) */}
+      <AchievementModal
+        isOpen={isAchievementViewerOpen}
+        onClose={() => setIsAchievementViewerOpen(false)}
+        message={achievementMessage}
+        achievements={achievements}
+        isLoading={isLoadingAchievements}
+      />
+
+      {/* ACHIEVEMENT FORM MODAL (ADMIN) */}
+      <AchievementFormModal
+        isOpen={isAchievementFormOpen}
+        onClose={() => {
+          setIsAchievementFormOpen(false);
+          setEditingAchievement(null);
+        }}
+        onSave={handleSaveAchievement}
+        initialAchievement={editingAchievement}
+      />
+
+      {/* DIALOG: Delete Achievement Confirmation */}
+      <ConfirmDialog
+        isOpen={!!deletingAchievementId}
+        title="Delete Achievement?"
+        message="Are you sure you want to delete this user achievement? This action is permanent and will remove the achievement from public view."
+        confirmText="Delete Achievement"
+        cancelText="Cancel"
+        isDestructive={true}
+        isLoading={isDeletingAchievement}
+        onConfirm={handleConfirmDeleteAchievement}
+        onCancel={() => setDeletingAchievementId(null)}
       />
     </div>
   );

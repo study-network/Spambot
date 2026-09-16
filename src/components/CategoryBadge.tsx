@@ -6,14 +6,17 @@ interface CategoryBadgeProps {
   category: ServerCategory;
   showIcon?: boolean;
   size?: 'sm' | 'md';
+  status?: 'Active' | 'Inactive';
 }
 
 export const CategoryBadge: React.FC<CategoryBadgeProps> = ({
   category,
   showIcon = true,
   size = 'md',
+  status,
 }) => {
   const sizeClasses = size === 'sm' ? 'px-2 py-0.5 text-xs' : 'px-2.5 py-1 text-xs';
+  const labelSuffix = status ? ` • ${status}` : '';
 
   if (category === 'Working') {
     return (
@@ -26,7 +29,7 @@ export const CategoryBadge: React.FC<CategoryBadgeProps> = ({
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
           <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
         </span>
-        Working
+        Working{labelSuffix}
       </span>
     );
   }
@@ -39,7 +42,7 @@ export const CategoryBadge: React.FC<CategoryBadgeProps> = ({
       >
         {showIcon && <AlertCircle className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />}
         <span className="inline-flex rounded-full h-1.5 w-1.5 bg-rose-500"></span>
-        Error
+        Error{labelSuffix}
       </span>
     );
   }
@@ -52,7 +55,7 @@ export const CategoryBadge: React.FC<CategoryBadgeProps> = ({
       >
         {showIcon && <AlertTriangle className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400" />}
         <span className="inline-flex rounded-full h-1.5 w-1.5 bg-orange-500"></span>
-        Some Error
+        Some Error{labelSuffix}
       </span>
     );
   }
@@ -65,7 +68,7 @@ export const CategoryBadge: React.FC<CategoryBadgeProps> = ({
       >
         {showIcon && <FlaskConical className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />}
         <span className="inline-flex rounded-full h-1.5 w-1.5 bg-cyan-500"></span>
-        Testing
+        Testing{labelSuffix}
       </span>
     );
   }
@@ -78,7 +81,7 @@ export const CategoryBadge: React.FC<CategoryBadgeProps> = ({
     >
       {showIcon && <ShieldAlert className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />}
       <span className="inline-flex rounded-full h-1.5 w-1.5 bg-amber-500"></span>
-      Unfilter
+      Unfilter{labelSuffix}
     </span>
   );
 };

@@ -1,4 +1,5 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
+dotenv.config({ override: true });
 import express, { Request, Response, NextFunction } from 'express';
 import path from 'path';
 import jwt from 'jsonwebtoken';
@@ -8,6 +9,8 @@ import {
   initDatabase,
   getPublicWebApps,
   getServerLaunchUrl,
+  getServerLaunchInfo,
+  toggleServerStatus,
   getAdminStats,
   getAdminWebApps,
   getAdminWebAppById,
@@ -17,6 +20,15 @@ import {
   getUserByEmail,
   getSiteSettings,
   updateSiteSettings,
+  getPublicAchievements,
+  getAdminAchievements,
+  getAchievementById,
+  createAchievement,
+  updateAchievement,
+  toggleAchievementPin,
+  deleteAchievement,
+  getAchievementMessage,
+  updateAchievementMessage,
 } from './server/db.ts';
 
 const PORT = 3000;
@@ -123,15 +135,40 @@ async function startServer() {
     }
   });
 
-  // Launch server endpoint: Fetches destination URL only when user clicks a server
+  // Public User's Achievement Message endpoint
+  app.get('/api/achievements/message', (req, res) => {
+    try {
+      const message = getAchievementMessage();
+      res.json(message);
+    } catch (err: any) {
+      console.error('Error fetching achievement message:', err);
+      res.status(500).json({ error: 'Failed to retrieve achievement message' });
+    }
+  });
+
+  // Public User's Achievement endpoint
+  app.get('/api/achievements', (req, res) => {
+    try {
+      const achievements = getPublicAchievements();
+      res.json(achievements);
+    } catch (err: any) {
+      console.error('Error fetching achievements:', err);
+      res.status(500).json({ error: 'Failed to retrieve achievements' });
+    }
+  });
+
+  // Launch server endpoint: Fetches destination URL only when user clicks a server (verifies isActive)
   app.get('/api/webapps/:webAppId/servers/:serverId/launch', (req, res) => {
     try {
       const { webAppId, serverId } = req.params;
-      const url = getServerLaunchUrl(webAppId, serverId);
-      if (!url) {
+      const info = getServerLaunchInfo(webAppId, serverId);
+      if (!info) {
         return res.status(404).json({ error: 'Server link not found' });
       }
-      res.json({ url });
+      if (!info.isActive) {
+        return res.status(403).json({ error: 'This server is currently inactive and cannot be launched.' });
+      }
+      res.json({ url: info.url });
     } catch (err: any) {
       console.error('Error launching server:', err);
       res.status(500).json({ error: 'Failed to launch server' });
@@ -147,6 +184,9 @@ async function startServer() {
       for (const appItem of apps) {
         const found = appItem.servers.find(s => s.id === serverId);
         if (found) {
+          if (!found.isActive) {
+            return res.status(403).json({ error: 'This server is currently inactive and cannot be launched.' });
+          }
           return res.json({ url: found.url });
         }
       }
@@ -163,12 +203,49 @@ async function startServer() {
   // Admin Login
   app.post('/api/auth/login', (req, res) => {
     try {
-      const { email, password } = req.body;
-      if (!email || !password) {
-        return res.status(400).json({ error: 'Email and password are required' });
+      const { email, username, password } = req.body;
+      const loginId = (email || username || '').trim();
+      if (!loginId || !password) {
+        return res.status(400).json({ error: 'Email/Username and password are required' });
       }
 
-      const user = getUserByEmail(email);
+      // Check environment variables credentials first (.env support)
+      const envAdminId = (process.env.ADMIN_ID || process.env.ADMIN_USERNAME || 'admin').toLowerCase().trim();
+      const envEmail = (process.env.ADMIN_EMAIL || '').toLowerCase().trim();
+      const envPass = process.env.ADMIN_PASSWORD;
+
+      const inputId = loginId.toLowerCase();
+      const matchesEnv = Boolean(
+        envPass &&
+        password === envPass &&
+        (inputId === envAdminId || (envEmail && inputId === envEmail) || (inputId === 'admin' && envAdminId === 'admin'))
+      );
+
+      // Check user by provided identifier in database
+      let user = getUserByEmail(loginId);
+      if (!user && loginId.toLowerCase() === 'admin') {
+        user = getUserByEmail('admin@example.com');
+      }
+
+      if (matchesEnv) {
+        // Authenticated via environment variables (.env)
+        const effectiveId = user ? user.id : 'env-admin';
+        const effectiveEmail = user ? user.email : (envAdminId || envEmail || 'admin');
+        const token = jwt.sign(
+          { id: effectiveId, email: effectiveEmail, role: 'admin' },
+          JWT_SECRET,
+          { expiresIn: '7d' }
+        );
+        return res.json({
+          token,
+          user: {
+            id: effectiveId,
+            email: effectiveEmail,
+            role: 'admin',
+          },
+        });
+      }
+
       if (!user) {
         return res.status(401).json({ error: 'Invalid email or password' });
       }
@@ -282,6 +359,7 @@ async function startServer() {
       const cleanServers = servers.map((s: any) => ({
         url: s.url.trim(),
         category: s.category,
+        isActive: s.isActive !== false,
       }));
 
       const newApp = createWebApp(name.trim(), icon.trim(), cleanServers);
@@ -314,6 +392,7 @@ async function startServer() {
         id: s.id,
         url: s.url.trim(),
         category: s.category,
+        isActive: s.isActive !== false,
       }));
 
       const updated = updateWebApp(id, name.trim(), icon.trim(), cleanServers);
@@ -326,6 +405,28 @@ async function startServer() {
 
   app.put('/api/admin/webapps/:id', requireAdminAuth, handleUpdateWebApp);
   app.put('/api/webapps/:id', requireAdminAuth, handleUpdateWebApp);
+
+  // Toggle server isActive status independently
+  const handleToggleServer = (req: Request, res: Response) => {
+    try {
+      const { serverId } = req.params;
+      const { isActive } = req.body || {};
+      const result = toggleServerStatus(
+        serverId,
+        typeof isActive === 'boolean' ? isActive : undefined
+      );
+      if (!result) {
+        return res.status(404).json({ error: 'Server not found' });
+      }
+      res.json(result);
+    } catch (err: any) {
+      console.error('Error updating server status:', err);
+      res.status(500).json({ error: 'Failed to update server status' });
+    }
+  };
+
+  app.patch('/api/admin/servers/:serverId/status', requireAdminAuth, handleToggleServer);
+  app.post('/api/admin/servers/:serverId/toggle', requireAdminAuth, handleToggleServer);
 
   // Delete WebApp (supports both /api/admin/webapps/:id and /api/webapps/:id with auth)
   const handleDeleteWebApp = (req: Request, res: Response) => {
@@ -408,6 +509,136 @@ async function startServer() {
     } catch (err: any) {
       console.error('Error updating admin message:', err);
       res.status(500).json({ error: 'Failed to update message' });
+    }
+  });
+
+  // ==========================================
+  // ADMIN ACHIEVEMENTS ROUTES
+  // ==========================================
+
+  // Admin User's Achievement Message endpoints
+  app.get('/api/admin/achievements/message', requireAdminAuth, (req, res) => {
+    try {
+      const msg = getAchievementMessage();
+      res.json(msg);
+    } catch (err: any) {
+      console.error('Error fetching admin achievement message:', err);
+      res.status(500).json({ error: 'Failed to retrieve achievement message' });
+    }
+  });
+
+  app.put('/api/admin/achievements/message', requireAdminAuth, (req, res) => {
+    try {
+      const { title, content } = req.body;
+      const updated = updateAchievementMessage(
+        title !== undefined ? String(title) : undefined,
+        content !== undefined ? String(content) : undefined
+      );
+      res.json(updated);
+    } catch (err: any) {
+      console.error('Error updating achievement message:', err);
+      res.status(500).json({ error: 'Failed to update achievement message' });
+    }
+  });
+
+  app.get('/api/admin/achievements', requireAdminAuth, (req, res) => {
+    try {
+      const achievements = getAdminAchievements();
+      res.json(achievements);
+    } catch (err: any) {
+      console.error('Error fetching admin achievements:', err);
+      res.status(500).json({ error: 'Failed to retrieve achievements' });
+    }
+  });
+
+  app.get('/api/admin/achievements/:id', requireAdminAuth, (req, res) => {
+    try {
+      const item = getAchievementById(req.params.id);
+      if (!item) {
+        return res.status(404).json({ error: 'Achievement not found' });
+      }
+      res.json(item);
+    } catch (err: any) {
+      console.error('Error fetching achievement:', err);
+      res.status(500).json({ error: 'Failed to retrieve achievement' });
+    }
+  });
+
+  app.post('/api/admin/achievements', requireAdminAuth, (req, res) => {
+    try {
+      const { imageUrl, comment, isPinned } = req.body;
+      if (!imageUrl || !isValidImageUrl(imageUrl)) {
+        return res.status(400).json({ error: 'Valid achievement image is required (upload or URL)' });
+      }
+      if (!comment || typeof comment !== 'string' || !comment.trim()) {
+        return res.status(400).json({ error: 'Admin comment is required' });
+      }
+
+      const created = createAchievement(imageUrl.trim(), comment.trim(), Boolean(isPinned));
+      res.status(201).json(created);
+    } catch (err: any) {
+      console.error('Error creating achievement:', err);
+      res.status(500).json({ error: 'Failed to create achievement' });
+    }
+  });
+
+  app.put('/api/admin/achievements/:id', requireAdminAuth, (req, res) => {
+    try {
+      const { id } = req.params;
+      const { imageUrl, comment, isPinned } = req.body;
+      if (!imageUrl || !isValidImageUrl(imageUrl)) {
+        return res.status(400).json({ error: 'Valid achievement image is required (upload or URL)' });
+      }
+      if (!comment || typeof comment !== 'string' || !comment.trim()) {
+        return res.status(400).json({ error: 'Admin comment is required' });
+      }
+
+      const updated = updateAchievement(
+        id,
+        imageUrl.trim(),
+        comment.trim(),
+        isPinned !== undefined ? Boolean(isPinned) : undefined
+      );
+      if (!updated) {
+        return res.status(404).json({ error: 'Achievement not found' });
+      }
+      res.json(updated);
+    } catch (err: any) {
+      console.error('Error updating achievement:', err);
+      res.status(500).json({ error: 'Failed to update achievement' });
+    }
+  });
+
+  // Pin / Unpin achievement
+  const handleToggleAchievementPin = (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { isPinned } = req.body;
+      const updated = toggleAchievementPin(
+        id,
+        typeof isPinned === 'boolean' ? isPinned : undefined
+      );
+      if (!updated) {
+        return res.status(404).json({ error: 'Achievement not found' });
+      }
+      res.json(updated);
+    } catch (err: any) {
+      console.error('Error toggling pin on achievement:', err);
+      res.status(500).json({ error: 'Failed to update pin status' });
+    }
+  };
+
+  app.patch('/api/admin/achievements/:id/pin', requireAdminAuth, handleToggleAchievementPin);
+  app.post('/api/admin/achievements/:id/pin', requireAdminAuth, handleToggleAchievementPin);
+
+  app.delete('/api/admin/achievements/:id', requireAdminAuth, (req, res) => {
+    try {
+      const { id } = req.params;
+      deleteAchievement(id);
+      res.json({ success: true, message: 'Achievement deleted successfully' });
+    } catch (err: any) {
+      console.error('Error deleting achievement:', err);
+      res.status(500).json({ error: 'Failed to delete achievement' });
     }
   });
 

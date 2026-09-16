@@ -2,7 +2,9 @@ import React, { useState } from 'react';
 import { 
   AdminWebApp, 
   DashboardStats,
-  SiteSettings
+  SiteSettings,
+  Achievement,
+  AchievementMessage,
 } from '../types.ts';
 import { 
   AppWindow, 
@@ -20,24 +22,35 @@ import {
   ShieldCheck,
   Server,
   Settings,
-  Megaphone
+  Megaphone,
+  Trophy
 } from 'lucide-react';
 import { FloatingAddButton } from './FloatingAddButton.tsx';
 import { CategoryBadge } from './CategoryBadge.tsx';
 import { SiteSettingsForm } from './SiteSettingsForm.tsx';
 import { MessageNoticeForm } from './MessageNoticeForm.tsx';
+import { AchievementAdminSection } from './AchievementAdminSection.tsx';
 
 interface AdminDashboardProps {
   stats: DashboardStats | null;
   webApps: AdminWebApp[];
   settings: SiteSettings | null;
   onSaveSettings: (settings: Partial<SiteSettings>) => Promise<void>;
+  achievements?: Achievement[];
+  achievementsLoading?: boolean;
+  onOpenAddAchievement?: () => void;
+  onOpenEditAchievement?: (achievement: Achievement) => void;
+  onDeleteAchievement?: (id: string) => void;
+  achievementMessage?: AchievementMessage | null;
+  onSaveAchievementMessage?: (payload: { title: string; content: string }) => Promise<void>;
+  onTogglePinAchievement?: (id: string, isPinned: boolean) => Promise<void>;
   adminEmail?: string;
   onOpenAdd: () => void;
   onOpenEdit: (app: AdminWebApp) => void;
   onOpenDelete: (app: AdminWebApp) => void;
   onLogout: () => void;
   onSwitchToPublic: () => void;
+  onToggleServerStatus?: (appId: string, serverId: string, newStatus: boolean) => Promise<void>;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
@@ -45,14 +58,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   webApps,
   settings,
   onSaveSettings,
+  achievements = [],
+  achievementsLoading = false,
+  onOpenAddAchievement = () => {},
+  onOpenEditAchievement = () => {},
+  onDeleteAchievement = () => {},
+  achievementMessage = null,
+  onSaveAchievementMessage,
+  onTogglePinAchievement,
   adminEmail,
   onOpenAdd,
   onOpenEdit,
   onOpenDelete,
   onLogout,
   onSwitchToPublic,
+  onToggleServerStatus,
 }) => {
-  const [activeTab, setActiveTab] = useState<'apps' | 'message' | 'settings'>('apps');
+  const [activeTab, setActiveTab] = useState<'apps' | 'achievements' | 'message' | 'settings'>('apps');
   const [searchQuery, setSearchQuery] = useState('');
 
   const filteredApps = webApps.filter(app =>
@@ -208,6 +230,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </button>
 
           <button
+            id="tab-user-achievements"
+            type="button"
+            onClick={() => setActiveTab('achievements')}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
+              activeTab === 'achievements'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800'
+            }`}
+          >
+            <Trophy className="w-4 h-4 text-amber-500" />
+            <span>User's Achievements ({achievements.length})</span>
+          </button>
+
+          <button
             id="tab-message-notice"
             type="button"
             onClick={() => setActiveTab('message')}
@@ -235,6 +271,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <span>Site Settings</span>
           </button>
         </div>
+
+        {activeTab === 'achievements' && (
+          <AchievementAdminSection
+            achievements={achievements}
+            isLoading={achievementsLoading}
+            onOpenAddModal={onOpenAddAchievement}
+            onOpenEditModal={onOpenEditAchievement}
+            onDeleteAchievement={onDeleteAchievement}
+            message={achievementMessage}
+            onSaveMessage={onSaveAchievementMessage}
+            onTogglePin={onTogglePinAchievement}
+          />
+        )}
 
         {activeTab === 'message' && (
           <MessageNoticeForm
@@ -358,17 +407,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
                   </div>
 
-                  {/* Middle: Quick Server Preview Pills */}
-                  <div className="flex flex-wrap items-center gap-1.5 md:max-w-md">
+                  {/* Middle: Quick Server Preview Pills & ON/OFF Controls */}
+                  <div className="flex flex-wrap items-center gap-2 md:max-w-lg">
                     {app.servers.map((s, idx) => (
                       <div
                         key={s.id || idx}
-                        className="inline-flex items-center gap-1.5 px-2 py-1 bg-neutral-50 dark:bg-neutral-800/80 border border-neutral-200/60 dark:border-neutral-700/60 rounded-lg text-xs"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-neutral-50 dark:bg-neutral-800/80 border border-neutral-200/60 dark:border-neutral-700/60 rounded-lg text-xs shadow-2xs"
                       >
-                        <span className="font-medium text-neutral-700 dark:text-neutral-300">
+                        <span className="font-semibold text-neutral-800 dark:text-neutral-200">
                           Server {idx + 1}
                         </span>
                         <CategoryBadge category={s.category} size="sm" showIcon={false} />
+                        
+                        {/* Independent ON/OFF toggle button */}
+                        <button
+                          id={`toggle-btn-${app.id}-${s.id || idx}`}
+                          type="button"
+                          onClick={() => onToggleServerStatus && onToggleServerStatus(app.id, s.id, !s.isActive)}
+                          title={`Click to turn Server ${idx + 1} ${s.isActive ? 'OFF' : 'ON'}`}
+                          className={`ml-0.5 px-2 py-0.5 rounded text-[10px] font-bold tracking-wider transition-all cursor-pointer ${
+                            s.isActive
+                              ? 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-xs'
+                              : 'bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300'
+                          }`}
+                        >
+                          {s.isActive ? 'ON' : 'OFF'}
+                        </button>
                       </div>
                     ))}
                   </div>
