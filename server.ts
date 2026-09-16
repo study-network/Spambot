@@ -15,6 +15,8 @@ import {
   updateWebApp,
   deleteWebApp,
   getUserByEmail,
+  getSiteSettings,
+  updateSiteSettings,
 } from './server/db.ts';
 
 const PORT = 3000;
@@ -93,6 +95,31 @@ async function startServer() {
     } catch (err: any) {
       console.error('Error fetching public webapps:', err);
       res.status(500).json({ error: 'Failed to retrieve web apps' });
+    }
+  });
+
+  // Public Site Settings (Telegram, WhatsApp, About Us, Stay Happy, Message)
+  app.get('/api/settings', (req, res) => {
+    try {
+      const settings = getSiteSettings();
+      res.json(settings);
+    } catch (err: any) {
+      console.error('Error fetching site settings:', err);
+      res.status(500).json({ error: 'Failed to retrieve site settings' });
+    }
+  });
+
+  // Public Message / Notice endpoint
+  app.get('/api/message', (req, res) => {
+    try {
+      const settings = getSiteSettings();
+      res.json({
+        messageTitle: settings.messageTitle || 'Message',
+        messageContent: settings.messageContent || '',
+      });
+    } catch (err: any) {
+      console.error('Error fetching message:', err);
+      res.status(500).json({ error: 'Failed to retrieve message' });
     }
   });
 
@@ -319,6 +346,70 @@ async function startServer() {
 
   app.delete('/api/admin/webapps/:id', requireAdminAuth, handleDeleteWebApp);
   app.delete('/api/webapps/:id', requireAdminAuth, handleDeleteWebApp);
+
+  // Admin Site Settings routes
+  app.get('/api/admin/settings', requireAdminAuth, (req, res) => {
+    try {
+      const settings = getSiteSettings();
+      res.json(settings);
+    } catch (err: any) {
+      console.error('Error fetching admin settings:', err);
+      res.status(500).json({ error: 'Failed to retrieve site settings' });
+    }
+  });
+
+  app.put('/api/admin/settings', requireAdminAuth, (req, res) => {
+    try {
+      const {
+        telegramUrl,
+        whatsappUrl,
+        aboutTitle,
+        aboutDescription,
+        happyTitle,
+        happyMessage,
+        happyIcon,
+        messageTitle,
+        messageContent,
+      } = req.body;
+
+      const updated = updateSiteSettings({
+        telegramUrl: telegramUrl !== undefined ? String(telegramUrl) : undefined,
+        whatsappUrl: whatsappUrl !== undefined ? String(whatsappUrl) : undefined,
+        aboutTitle: aboutTitle !== undefined ? String(aboutTitle) : undefined,
+        aboutDescription: aboutDescription !== undefined ? String(aboutDescription) : undefined,
+        happyTitle: happyTitle !== undefined ? String(happyTitle) : undefined,
+        happyMessage: happyMessage !== undefined ? String(happyMessage) : undefined,
+        happyIcon: happyIcon !== undefined ? String(happyIcon) : undefined,
+        messageTitle: messageTitle !== undefined ? String(messageTitle) : undefined,
+        messageContent: messageContent !== undefined ? String(messageContent) : undefined,
+      });
+
+      res.json(updated);
+    } catch (err: any) {
+      console.error('Error saving site settings:', err);
+      res.status(500).json({ error: 'Failed to save site settings' });
+    }
+  });
+
+  // Dedicated admin endpoint for updating Message / Notice
+  app.put('/api/admin/message', requireAdminAuth, (req, res) => {
+    try {
+      const { messageTitle, messageContent } = req.body;
+      const updated = updateSiteSettings({
+        messageTitle: messageTitle !== undefined ? String(messageTitle) : undefined,
+        messageContent: messageContent !== undefined ? String(messageContent) : undefined,
+      });
+
+      res.json({
+        messageTitle: updated.messageTitle,
+        messageContent: updated.messageContent,
+        updatedAt: updated.updatedAt,
+      });
+    } catch (err: any) {
+      console.error('Error updating admin message:', err);
+      res.status(500).json({ error: 'Failed to update message' });
+    }
+  });
 
   // Server management endpoints
   app.post('/api/webapps/:id/servers', requireAdminAuth, (req, res) => {

@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { 
   AdminWebApp, 
-  DashboardStats 
+  DashboardStats,
+  SiteSettings
 } from '../types.ts';
 import { 
   AppWindow, 
@@ -17,14 +18,20 @@ import {
   LogOut, 
   ExternalLink,
   ShieldCheck,
-  Server
+  Server,
+  Settings,
+  Megaphone
 } from 'lucide-react';
 import { FloatingAddButton } from './FloatingAddButton.tsx';
 import { CategoryBadge } from './CategoryBadge.tsx';
+import { SiteSettingsForm } from './SiteSettingsForm.tsx';
+import { MessageNoticeForm } from './MessageNoticeForm.tsx';
 
 interface AdminDashboardProps {
   stats: DashboardStats | null;
   webApps: AdminWebApp[];
+  settings: SiteSettings | null;
+  onSaveSettings: (settings: Partial<SiteSettings>) => Promise<void>;
   adminEmail?: string;
   onOpenAdd: () => void;
   onOpenEdit: (app: AdminWebApp) => void;
@@ -36,6 +43,8 @@ interface AdminDashboardProps {
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   stats,
   webApps,
+  settings,
+  onSaveSettings,
   adminEmail,
   onOpenAdd,
   onOpenEdit,
@@ -43,6 +52,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onLogout,
   onSwitchToPublic,
 }) => {
+  const [activeTab, setActiveTab] = useState<'apps' | 'message' | 'settings'>('apps');
   const [searchQuery, setSearchQuery] = useState('');
 
   const filteredApps = webApps.filter(app =>
@@ -181,7 +191,68 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         </section>
 
-        {/* Action Header & Search */}
+        {/* Tab Selection */}
+        <div className="flex items-center gap-2 mb-6 border-b border-neutral-200/80 dark:border-neutral-800 pb-3">
+          <button
+            id="tab-web-apps"
+            type="button"
+            onClick={() => setActiveTab('apps')}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
+              activeTab === 'apps'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800'
+            }`}
+          >
+            <AppWindow className="w-4 h-4" />
+            <span>Web Apps & Servers ({webApps.length})</span>
+          </button>
+
+          <button
+            id="tab-message-notice"
+            type="button"
+            onClick={() => setActiveTab('message')}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
+              activeTab === 'message'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800'
+            }`}
+          >
+            <Megaphone className="w-4 h-4" />
+            <span>Message / Notice</span>
+          </button>
+
+          <button
+            id="tab-site-settings"
+            type="button"
+            onClick={() => setActiveTab('settings')}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
+              activeTab === 'settings'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800'
+            }`}
+          >
+            <Settings className="w-4 h-4" />
+            <span>Site Settings</span>
+          </button>
+        </div>
+
+        {activeTab === 'message' && (
+          <MessageNoticeForm
+            settings={settings}
+            onSave={onSaveSettings}
+          />
+        )}
+
+        {activeTab === 'settings' && (
+          <SiteSettingsForm
+            settings={settings}
+            onSave={onSaveSettings}
+          />
+        )}
+
+        {activeTab === 'apps' && (
+          <>
+            {/* Action Header & Search */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
           <div>
             <h2 id="admin-list-title" className="text-xl font-bold text-neutral-900 dark:text-neutral-100">
@@ -329,10 +400,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             })}
           </div>
         )}
+        </>
+        )}
       </main>
 
-      {/* Floating Add Button in Bottom-Right Corner */}
-      <FloatingAddButton onClick={onOpenAdd} />
+      {/* Floating Add Button in Bottom-Right Corner (Only in Apps Tab) */}
+      {activeTab === 'apps' && <FloatingAddButton onClick={onOpenAdd} />}
     </div>
   );
 };

@@ -52,3 +52,18 @@ export interface AuthResponse {
   token: string;
   user: AdminUser;
 }
+
+export interface SiteSettings {
+  id?: string;
+  telegramUrl: string;
+  whatsappUrl: string;
+  aboutTitle: string;
+  aboutDescription: string;
+  happyTitle: string;
+  happyMessage: string;
+  happyIcon?: string;
+  messageTitle?: string;
+  messageContent?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}

@@ -2,7 +2,8 @@ import {
   PublicWebApp, 
   AdminWebApp, 
   DashboardStats, 
-  AuthResponse 
+  AuthResponse,
+  SiteSettings
 } from '../types.ts';
 
 const TOKEN_KEY = 'web_app_admin_token';
@@ -173,4 +174,36 @@ export async function deleteAdminWebApp(id: string): Promise<void> {
     const data = await res.json().catch(() => ({}));
     throw new Error(data.error || 'Failed to delete web app');
   }
+}
+
+// Site Settings API
+export async function fetchSiteSettings(): Promise<SiteSettings> {
+  const res = await fetch('/api/settings');
+  if (!res.ok) {
+    throw new Error('Failed to fetch site settings');
+  }
+  return res.json();
+}
+
+export async function fetchAdminSettings(): Promise<SiteSettings> {
+  const res = await fetch('/api/admin/settings', {
+    headers: getHeaders(true),
+  });
+  if (!res.ok) {
+    throw new Error('Failed to fetch admin settings');
+  }
+  return res.json();
+}
+
+export async function saveAdminSettings(settings: Partial<SiteSettings>): Promise<SiteSettings> {
+  const res = await fetch('/api/admin/settings', {
+    method: 'PUT',
+    headers: getHeaders(true),
+    body: JSON.stringify(settings),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || 'Failed to save site settings');
+  }
+  return data;
 }

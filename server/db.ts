@@ -79,6 +79,21 @@ export async function initDatabase(): Promise<Database> {
 
     CREATE INDEX IF NOT EXISTS idx_servers_webapp ON servers(web_app_id);
     CREATE INDEX IF NOT EXISTS idx_servers_sort ON servers(sort_order);
+
+    CREATE TABLE IF NOT EXISTS site_settings (
+      id TEXT PRIMARY KEY,
+      telegram_url TEXT NOT NULL DEFAULT '',
+      whatsapp_url TEXT NOT NULL DEFAULT '',
+      about_title TEXT NOT NULL DEFAULT 'About Us',
+      about_description TEXT NOT NULL DEFAULT '',
+      happy_title TEXT NOT NULL DEFAULT 'Stay Happy',
+      happy_message TEXT NOT NULL DEFAULT 'Good things take time 💜',
+      happy_icon TEXT NOT NULL DEFAULT '💜',
+      message_title TEXT NOT NULL DEFAULT 'Important Message',
+      message_content TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
 
   // Migrate servers table if existing table lacks 'Some Error' category
@@ -109,6 +124,36 @@ export async function initDatabase(): Promise<Database> {
     }
   } catch (migErr) {
     console.warn('[Database] Servers table migration notice:', migErr);
+  }
+
+  // Migrate site_settings table if missing message_title or message_content columns
+  try {
+    const settingsCols = db.exec(`PRAGMA table_info(site_settings)`);
+    if (settingsCols.length > 0 && settingsCols[0].values.length > 0) {
+      const colNames = settingsCols[0].values.map((col: any) => String(col[1]));
+      if (!colNames.includes('message_title')) {
+        db.run(`ALTER TABLE site_settings ADD COLUMN message_title TEXT NOT NULL DEFAULT 'Important Message'`);
+        console.log('[Database] Added message_title column to site_settings');
+      }
+      if (!colNames.includes('message_content')) {
+        db.run(`ALTER TABLE site_settings ADD COLUMN message_content TEXT NOT NULL DEFAULT ''`);
+        console.log('[Database] Added message_content column to site_settings');
+      }
+      // Populate default message content if it's empty so the user sees the example immediately
+      const defaultExampleMsg = `📚 Stay consistent and keep learning every day.\n🚫 Do not misuse or share restricted links.\n💡 Use this platform only for educational purposes.\n❤️ Keep learning and stay motivated!`;
+      const currentMsgStmt = db.prepare(`SELECT message_content FROM site_settings LIMIT 1`);
+      if (currentMsgStmt.step()) {
+        const existingVal = currentMsgStmt.get();
+        if (!existingVal[0] || String(existingVal[0]).trim() === '') {
+          db.run(`UPDATE site_settings SET message_title = 'Important Message', message_content = ? WHERE id = (SELECT id FROM site_settings LIMIT 1)`, [defaultExampleMsg]);
+          console.log('[Database] Initialized default example message in site_settings');
+        }
+      }
+      currentMsgStmt.free();
+      saveDb();
+    }
+  } catch (migErr) {
+    console.warn('[Database] site_settings migration notice:', migErr);
   }
 
   // Seed default admin accounts
@@ -206,6 +251,32 @@ export async function initDatabase(): Promise<Database> {
       sStmt.run([crypto.randomUUID(), toolsId, s.url, s.category, idx + 1, now, now]);
       sStmt.free();
     });
+  }
+
+  // Seed site settings if empty
+  const settingsCheck = db.exec(`SELECT id FROM site_settings LIMIT 1`);
+  if (settingsCheck.length === 0 || settingsCheck[0].values.length === 0) {
+    const now = new Date().toISOString();
+    const sId = 'default_settings';
+    const stmt = db.prepare(`
+      INSERT INTO site_settings (
+        id, telegram_url, whatsapp_url, about_title, about_description, happy_title, happy_message, happy_icon, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    stmt.run([
+      sId,
+      'https://t.me/example',
+      'https://wa.me/example',
+      'About Us',
+      'Welcome to Web App Link Manager. We provide verified multi-server link routing with real-time status indicators, high-speed failover, and zero downtime connection to your favourite web applications.',
+      'Stay Happy',
+      'Good things take time 💜',
+      '💜',
+      now,
+      now,
+    ]);
+    stmt.free();
+    console.log('[Database] Initialized default site settings');
   }
 
   saveDb();
@@ -507,4 +578,133 @@ export function getUserByEmail(email: string) {
     role: String(row[3]),
     createdAt: String(row[4]),
   };
+}
+
+// Site Settings queries
+export function getSiteSettings() {
+  const database = getDb();
+  const stmt = database.prepare(`
+    SELECT id, telegram_url, whatsapp_url, about_title, about_description, happy_title, happy_message, happy_icon, message_title, message_content, created_at, updated_at
+    FROM site_settings
+    LIMIT 1
+  `);
+  if (!stmt.step()) {
+    stmt.free();
+    return {
+      id: 'default_settings',
+      telegramUrl: '',
+      whatsappUrl: '',
+      aboutTitle: 'About Us',
+      aboutDescription: 'Welcome to Web App Link Manager. Safe and fast access to your favorite web applications.',
+      happyTitle: 'Stay Happy',
+      happyMessage: 'Good things take time 💜',
+      happyIcon: '💜',
+      messageTitle: 'Important Message',
+      messageContent: '📚 Stay consistent and keep learning every day.\n🚫 Do not misuse or share restricted links.\n💡 Use this platform only for educational purposes.\n❤️ Keep learning and stay motivated!',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  const row = stmt.get();
+  stmt.free();
+  return {
+    id: String(row[0]),
+    telegramUrl: String(row[1] || ''),
+    whatsappUrl: String(row[2] || ''),
+    aboutTitle: String(row[3] || 'About Us'),
+    aboutDescription: String(row[4] || ''),
+    happyTitle: String(row[5] || 'Stay Happy'),
+    happyMessage: String(row[6] || 'Good things take time 💜'),
+    happyIcon: String(row[7] || '💜'),
+    messageTitle: String(row[8] ?? 'Important Message'),
+    messageContent: String(row[9] ?? ''),
+    createdAt: String(row[10]),
+    updatedAt: String(row[11]),
+  };
+}
+
+export function updateSiteSettings(payload: {
+  telegramUrl?: string;
+  whatsappUrl?: string;
+  aboutTitle?: string;
+  aboutDescription?: string;
+  happyTitle?: string;
+  happyMessage?: string;
+  happyIcon?: string;
+  messageTitle?: string;
+  messageContent?: string;
+}) {
+  const database = getDb();
+  const now = new Date().toISOString();
+  
+  // Check if any row exists
+  const existing = getSiteSettings();
+  const rowId = existing.id || 'default_settings';
+
+  const telegramUrl = payload.telegramUrl !== undefined ? payload.telegramUrl.trim() : existing.telegramUrl;
+  const whatsappUrl = payload.whatsappUrl !== undefined ? payload.whatsappUrl.trim() : existing.whatsappUrl;
+  const aboutTitle = payload.aboutTitle !== undefined ? payload.aboutTitle.trim() : existing.aboutTitle;
+  const aboutDescription = payload.aboutDescription !== undefined ? payload.aboutDescription.trim() : existing.aboutDescription;
+  const happyTitle = payload.happyTitle !== undefined ? payload.happyTitle.trim() : existing.happyTitle;
+  const happyMessage = payload.happyMessage !== undefined ? payload.happyMessage.trim() : existing.happyMessage;
+  const happyIcon = payload.happyIcon !== undefined ? payload.happyIcon.trim() : (existing.happyIcon || '💜');
+  const messageTitle = payload.messageTitle !== undefined ? payload.messageTitle.trim() : (existing.messageTitle || 'Important Message');
+  const messageContent = payload.messageContent !== undefined ? payload.messageContent : (existing.messageContent || '');
+
+  const check = database.exec(`SELECT id FROM site_settings WHERE id = '${rowId}'`);
+  if (check.length > 0 && check[0].values.length > 0) {
+    const stmt = database.prepare(`
+      UPDATE site_settings
+      SET telegram_url = ?,
+          whatsapp_url = ?,
+          about_title = ?,
+          about_description = ?,
+          happy_title = ?,
+          happy_message = ?,
+          happy_icon = ?,
+          message_title = ?,
+          message_content = ?,
+          updated_at = ?
+      WHERE id = ?
+    `);
+    stmt.run([
+      telegramUrl,
+      whatsappUrl,
+      aboutTitle || 'About Us',
+      aboutDescription,
+      happyTitle || 'Stay Happy',
+      happyMessage || 'Good things take time 💜',
+      happyIcon || '💜',
+      messageTitle || 'Important Message',
+      messageContent,
+      now,
+      rowId,
+    ]);
+    stmt.free();
+  } else {
+    const stmt = database.prepare(`
+      INSERT INTO site_settings (
+        id, telegram_url, whatsapp_url, about_title, about_description, happy_title, happy_message, happy_icon, message_title, message_content, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    stmt.run([
+      rowId,
+      telegramUrl,
+      whatsappUrl,
+      aboutTitle || 'About Us',
+      aboutDescription,
+      happyTitle || 'Stay Happy',
+      happyMessage || 'Good things take time 💜',
+      happyIcon || '💜',
+      messageTitle || 'Important Message',
+      messageContent,
+      now,
+      now,
+    ]);
+    stmt.free();
+  }
+
+  saveDb();
+  return getSiteSettings();
 }

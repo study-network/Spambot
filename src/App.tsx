@@ -4,7 +4,8 @@ import {
   AdminWebApp, 
   DashboardStats, 
   ServerCategory,
-  AuthResponse
+  AuthResponse,
+  SiteSettings
 } from './types.ts';
 import { 
   fetchPublicWebApps, 
@@ -13,6 +14,9 @@ import {
   createAdminWebApp, 
   updateAdminWebApp, 
   deleteAdminWebApp,
+  fetchSiteSettings,
+  fetchAdminSettings,
+  saveAdminSettings,
   getAuthToken,
   getStoredUser,
   setAuthSession,
@@ -26,11 +30,14 @@ import { AddWebAppModal } from './components/AddWebAppModal.tsx';
 import { EditWebAppModal } from './components/EditWebAppModal.tsx';
 import { ConfirmDialog } from './components/ConfirmDialog.tsx';
 import { ToastContainer, ToastMessage } from './components/Toast.tsx';
+import { NavigationDrawer } from './components/NavigationDrawer.tsx';
+import { AboutUsModal } from './components/AboutUsModal.tsx';
 import { 
   AppWindow, 
   Search, 
   Server, 
-  Sparkles
+  Sparkles,
+  Menu
 } from 'lucide-react';
 
 export default function App() {
@@ -46,6 +53,11 @@ export default function App() {
   const [isLoadingPublic, setIsLoadingPublic] = useState<boolean>(true);
   const [publicSearchQuery, setPublicSearchQuery] = useState<string>('');
   const [selectedWebApp, setSelectedWebApp] = useState<PublicWebApp | null>(null);
+
+  // Site Settings & Slide-out Drawer State
+  const [siteSettings, setSiteSettings] = useState<SiteSettings | null>(null);
+  const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
+  const [isAboutOpen, setIsAboutOpen] = useState<boolean>(false);
 
   // Admin Data
   const [adminApps, setAdminApps] = useState<AdminWebApp[]>([]);
@@ -73,31 +85,48 @@ export default function App() {
     setToasts(prev => prev.filter(t => t.id !== id));
   };
 
+  // Load site settings (public & fallback)
+  const loadSettings = useCallback(async () => {
+    try {
+      const data = await fetchSiteSettings();
+      setSiteSettings(data);
+    } catch (err: any) {
+      console.error('Failed to load site settings:', err);
+    }
+  }, []);
+
   // Load public data
   const loadPublicData = useCallback(async () => {
     try {
       setIsLoadingPublic(true);
-      const data = await fetchPublicWebApps();
-      setPublicApps(data);
+      const [apps] = await Promise.all([
+        fetchPublicWebApps(),
+        loadSettings(),
+      ]);
+      setPublicApps(apps);
     } catch (err: any) {
       console.error('Failed to load public apps:', err);
       addToast('error', 'Unable to load web apps. Please try again.');
     } finally {
       setIsLoadingPublic(false);
     }
-  }, []);
+  }, [loadSettings]);
 
   // Load admin data
   const loadAdminData = useCallback(async () => {
     if (!getAuthToken()) return;
     try {
       setIsLoadingAdmin(true);
-      const [apps, stats] = await Promise.all([
+      const [apps, stats, settingsData] = await Promise.all([
         fetchAdminWebApps(),
         fetchAdminStats(),
+        fetchAdminSettings().catch(() => null),
       ]);
       setAdminApps(apps);
       setAdminStats(stats);
+      if (settingsData) {
+        setSiteSettings(settingsData);
+      }
     } catch (err: any) {
       console.error('Failed to load admin dashboard data:', err);
       if (err.message?.includes('Unauthorized')) {
@@ -224,6 +253,13 @@ export default function App() {
     }
   };
 
+  // Save Site Settings (Admin only)
+  const handleSaveSettings = async (payload: Partial<SiteSettings>) => {
+    const updated = await saveAdminSettings(payload);
+    setSiteSettings(updated);
+    addToast('success', 'Site settings updated successfully!');
+  };
+
   // Filter public apps
   const filteredPublicApps = publicApps.filter(app =>
     app.name.toLowerCase().includes(publicSearchQuery.toLowerCase())
@@ -247,6 +283,8 @@ export default function App() {
         <AdminDashboard
           stats={adminStats}
           webApps={adminApps}
+          settings={siteSettings}
+          onSaveSettings={handleSaveSettings}
           adminEmail={currentUser?.email}
           onOpenAdd={() => setIsAddOpen(true)}
           onOpenEdit={(app) => setEditingApp(app)}
@@ -277,19 +315,18 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Header Right Actions: Search Only */}
+              {/* Header Right: Hamburger Menu Button (Three-line icon on the RIGHT side) */}
               <div className="flex items-center gap-3">
-                <div className="relative w-48 sm:w-64 md:w-72">
-                  <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                  <input
-                    id="public-search-input"
-                    type="text"
-                    value={publicSearchQuery}
-                    onChange={(e) => setPublicSearchQuery(e.target.value)}
-                    placeholder="Search apps..."
-                    className="w-full pl-9 pr-4 py-2 bg-neutral-100/80 dark:bg-neutral-800/80 border border-neutral-200/80 dark:border-neutral-700/60 rounded-xl text-xs text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
-                  />
-                </div>
+                <button
+                  id="header-hamburger-btn"
+                  type="button"
+                  onClick={() => setIsDrawerOpen(true)}
+                  className="p-2.5 rounded-xl bg-neutral-100 hover:bg-neutral-200/80 dark:bg-neutral-800 dark:hover:bg-neutral-700/80 text-neutral-700 dark:text-neutral-200 transition-colors cursor-pointer border border-neutral-200/60 dark:border-neutral-700/50 shadow-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  aria-label="Open navigation menu"
+                  title="Menu"
+                >
+                  <Menu className="w-5 h-5" />
+                </button>
               </div>
             </div>
           </header>
@@ -308,16 +345,16 @@ export default function App() {
                 Click any application card below to view active servers and connect instantly with real-time status indicators.
               </p>
 
-              {/* Mobile search bar */}
-              <div className="mt-6 relative sm:hidden max-w-sm mx-auto">
+              {/* Main search bar */}
+              <div className="mt-6 relative max-w-md mx-auto">
                 <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
-                  id="mobile-search-input"
+                  id="main-apps-search-input"
                   type="text"
                   value={publicSearchQuery}
                   onChange={(e) => setPublicSearchQuery(e.target.value)}
                   placeholder="Search web apps..."
-                  className="w-full pl-9 pr-4 py-2.5 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl text-sm text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                  className="w-full pl-9 pr-4 py-2.5 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl text-sm text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm transition-all"
                 />
               </div>
             </div>
@@ -421,6 +458,21 @@ export default function App() {
         isLoading={isDeleting}
         onConfirm={handleConfirmDelete}
         onCancel={() => setDeletingApp(null)}
+      />
+
+      {/* SLIDE-OUT NAVIGATION DRAWER */}
+      <NavigationDrawer
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+        settings={siteSettings}
+        onOpenAbout={() => setIsAboutOpen(true)}
+      />
+
+      {/* ABOUT US MODAL */}
+      <AboutUsModal
+        isOpen={isAboutOpen}
+        onClose={() => setIsAboutOpen(false)}
+        settings={siteSettings}
       />
     </div>
   );
