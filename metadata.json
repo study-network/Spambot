@@ -1,0 +1,6 @@
+{
+  "name": "Web App Link Manager",
+  "description": "Modern web application to manage and launch web apps with multi-server link routing, category status indicators, and secure admin dashboard.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
