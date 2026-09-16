@@ -8,6 +8,7 @@ import {
   SiteSettings,
   Achievement,
   AchievementMessage,
+  AdminUser,
 } from './types.ts';
 import { 
   fetchPublicWebApps, 
@@ -44,6 +45,7 @@ import { NavigationDrawer } from './components/NavigationDrawer.tsx';
 import { AboutUsModal } from './components/AboutUsModal.tsx';
 import { AchievementModal } from './components/AchievementModal.tsx';
 import { AchievementFormModal } from './components/AchievementFormModal.tsx';
+import { StudyNetworkLogo } from './components/StudyNetworkLogo.tsx';
 import { 
   AppWindow, 
   Search, 
@@ -57,7 +59,7 @@ export default function App() {
 
   // Authentication State
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [currentUser, setCurrentUser] = useState<{ email: string } | null>(null);
+  const [currentUser, setCurrentUser] = useState<AdminUser | null>(getStoredUser);
 
   // Public Data
   const [publicApps, setPublicApps] = useState<PublicWebApp[]>([]);
@@ -192,10 +194,10 @@ export default function App() {
   // Initial authentication check & URL hash listener
   useEffect(() => {
     const initAuth = async () => {
-      const valid = await checkAuthMe();
-      if (valid) {
+      const user = await checkAuthMe();
+      if (user) {
         setIsAuthenticated(true);
-        setCurrentUser(getStoredUser());
+        setCurrentUser(user);
       } else {
         setIsAuthenticated(false);
         setCurrentUser(null);
@@ -207,7 +209,7 @@ export default function App() {
     // Initial authentication check & URL hash listener
     const handleHashRouting = () => {
       const hash = window.location.hash.toLowerCase();
-      if (hash === '#admin') {
+      if (hash.startsWith('#admin') || hash.startsWith('#admins')) {
         if (getAuthToken()) {
           setView('admin');
           loadAdminData();
@@ -435,7 +437,9 @@ export default function App() {
           achievementMessage={achievementMessage}
           onSaveAchievementMessage={handleSaveAchievementMessage}
           onTogglePinAchievement={handleTogglePinAchievement}
-          adminEmail={currentUser?.email}
+          adminEmail={currentUser?.username || currentUser?.email || 'admin'}
+          currentUser={currentUser}
+          onNotify={addToast}
           onOpenAdd={() => setIsAddOpen(true)}
           onOpenEdit={(app) => setEditingApp(app)}
           onOpenDelete={(app) => setDeletingApp(app)}
@@ -447,29 +451,94 @@ export default function App() {
 
       {/* VIEW: PUBLIC HOME PAGE */}
       {view === 'public' && (
-        <div id="public-homepage-root" className="flex-1 flex flex-col">
-          {/* Public Header */}
-          <header className="sticky top-0 z-30 bg-white/80 dark:bg-neutral-900/80 backdrop-blur-md border-b border-neutral-200/80 dark:border-neutral-800">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 flex items-center justify-between gap-4">
-              {/* Brand Logo & Name */}
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-600 text-white flex items-center justify-center shadow-md shadow-indigo-500/20">
-                  <AppWindow className="w-5 h-5" />
-                </div>
+        <div id="public-homepage-root" className="relative flex-1 flex flex-col min-h-screen bg-[#060813] text-neutral-100 overflow-x-hidden">
+          {/* CSS-Based Futuristic Space / Technology Background (No external image) */}
+          <div className="fixed inset-0 pointer-events-none overflow-hidden z-0" aria-hidden="true">
+            {/* Deep Navy/Black Canvas Base */}
+            <div className="absolute inset-0 bg-[#060813]" />
+
+            {/* Blue and Purple Nebula Glows */}
+            <div className="absolute -top-32 left-1/4 w-[500px] h-[500px] rounded-full bg-blue-600/10 blur-[130px]" />
+            <div className="absolute top-1/3 -right-32 w-[550px] h-[550px] rounded-full bg-purple-700/10 blur-[140px]" />
+            <div className="absolute bottom-10 left-10 w-[450px] h-[450px] rounded-full bg-amber-600/[0.05] blur-[130px]" />
+
+            {/* Subtle Star Field / Micro Particles using CSS Radial Gradients */}
+            <div 
+              className="absolute inset-0 opacity-40"
+              style={{
+                backgroundImage: `
+                  radial-gradient(1px 1px at 25px 35px, rgba(255, 255, 255, 0.45), transparent),
+                  radial-gradient(1.5px 1.5px at 120px 80px, rgba(253, 224, 71, 0.35), transparent),
+                  radial-gradient(1px 1px at 210px 190px, rgba(255, 255, 255, 0.4), transparent),
+                  radial-gradient(1px 1px at 320px 110px, rgba(147, 197, 253, 0.4), transparent),
+                  radial-gradient(1.5px 1.5px at 450px 290px, rgba(255, 255, 255, 0.35), transparent)
+                `,
+                backgroundSize: '480px 360px'
+              }}
+            />
+
+            {/* Subtle Tech Dot Grid */}
+            <div 
+              className="absolute inset-0 opacity-[0.035]"
+              style={{
+                backgroundImage: 'radial-gradient(rgba(255, 255, 255, 0.8) 1px, transparent 1px)',
+                backgroundSize: '28px 28px'
+              }}
+            />
+
+            {/* Elegant Thin Golden Curved Light Trails */}
+            <svg className="absolute inset-0 w-full h-full opacity-20" preserveAspectRatio="none" viewBox="0 0 1440 900">
+              <defs>
+                <linearGradient id="goldTrail1" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#D4AF37" stopOpacity="0" />
+                  <stop offset="40%" stopColor="#F5D77F" stopOpacity="0.8" />
+                  <stop offset="70%" stopColor="#DFB135" stopOpacity="0.6" />
+                  <stop offset="100%" stopColor="#8A5A0A" stopOpacity="0" />
+                </linearGradient>
+                <linearGradient id="goldTrail2" x1="100%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stopColor="#60A5FA" stopOpacity="0" />
+                  <stop offset="50%" stopColor="#A855F7" stopOpacity="0.6" />
+                  <stop offset="100%" stopColor="#F59E0B" stopOpacity="0" />
+                </linearGradient>
+              </defs>
+              <path
+                d="M -100 150 C 300 280, 800 -40, 1540 220"
+                fill="none"
+                stroke="url(#goldTrail1)"
+                strokeWidth="1.2"
+              />
+              <path
+                d="M -100 700 C 450 520, 950 820, 1540 580"
+                fill="none"
+                stroke="url(#goldTrail2)"
+                strokeWidth="1"
+              />
+            </svg>
+          </div>
+
+          {/* ================================================== */}
+          {/* HEADER                                             */}
+          {/* [STUDY NETWORK LOGO]  Study Network            [☰] */}
+          {/* ================================================== */}
+          <header className="sticky top-0 z-30 bg-[#070913]/80 backdrop-blur-xl border-b border-white/[0.08] shadow-[0_4px_25px_rgba(0,0,0,0.5)]">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 sm:h-18 flex items-center justify-between gap-4">
+              {/* Brand Logo & Name: Logo LEFT of "Study Network" */}
+              <div className="flex items-center gap-3 sm:gap-3.5">
+                <StudyNetworkLogo size={42} className="shrink-0" />
                 <div>
-                  <h1 id="public-header-title" className="font-bold text-base sm:text-lg text-neutral-900 dark:text-neutral-100 tracking-tight leading-none">
+                  <h1 id="public-header-title" className="font-bold text-lg sm:text-xl text-white tracking-tight leading-none">
                     Study Network
                   </h1>
                 </div>
               </div>
 
-              {/* Header Right: Hamburger Menu Button (Three-line icon on the RIGHT side) */}
+              {/* Header Right: Hamburger Menu Button */}
               <div className="flex items-center gap-3">
                 <button
                   id="header-hamburger-btn"
                   type="button"
                   onClick={() => setIsDrawerOpen(true)}
-                  className="p-2.5 rounded-xl bg-neutral-100 hover:bg-neutral-200/80 dark:bg-neutral-800 dark:hover:bg-neutral-700/80 text-neutral-700 dark:text-neutral-200 transition-colors cursor-pointer border border-neutral-200/60 dark:border-neutral-700/50 shadow-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="p-2.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-neutral-200 hover:text-white transition-all duration-200 cursor-pointer border border-white/[0.1] hover:border-amber-400/40 shadow-xs focus:outline-none focus:ring-2 focus:ring-amber-400/50"
                   aria-label="Open navigation menu"
                   title="Menu"
                 >
@@ -479,53 +548,87 @@ export default function App() {
             </div>
           </header>
 
-          {/* Public Hero / Announcement bar */}
-          <div className="bg-gradient-to-b from-indigo-50/50 via-white to-transparent dark:from-indigo-950/20 dark:via-neutral-950 dark:to-transparent border-b border-neutral-100/80 dark:border-neutral-900 py-10 sm:py-14 px-4 sm:px-6 lg:px-8 text-center">
-            <div className="max-w-2xl mx-auto">
-              <h2 id="public-main-headline" className="text-2xl sm:text-4xl font-extrabold tracking-tight text-neutral-900 dark:text-neutral-100">
+          {/* ================================================== */}
+          {/* HERO                                               */}
+          {/* WELCOME + Description + Subtle Glow (NO Logo here) */}
+          {/* ================================================== */}
+          <div className="relative z-10 py-10 sm:py-14 lg:py-16 px-4 sm:px-6 lg:px-8 text-center overflow-hidden">
+            {/* Subtle Ambient Radial Glow Behind Hero */}
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 sm:w-[500px] sm:h-[500px] bg-gradient-to-tr from-indigo-600/15 via-purple-600/10 to-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+
+            <div className="relative max-w-2xl mx-auto">
+              <h2
+                id="public-main-headline"
+                className="text-3xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-white drop-shadow-[0_2px_15px_rgba(255,255,255,0.15)]"
+              >
                 WELCOME
               </h2>
-              <p className="mt-2 text-sm sm:text-base text-neutral-500 dark:text-neutral-400 max-w-lg mx-auto">
-                Click any application card below to view active servers and connect instantly with real-time status indicators.
+
+              {/* Subtle decorative gold/blue glow line */}
+              <div className="w-24 sm:w-32 h-0.5 mx-auto mt-4 rounded-full bg-gradient-to-r from-transparent via-amber-400/80 to-transparent shadow-[0_0_10px_rgba(212,175,55,0.5)]" />
+
+              <p className="mt-4 text-sm sm:text-base lg:text-lg text-neutral-300 max-w-lg mx-auto font-normal leading-relaxed">
+                Explore your web applications and connect to active servers instantly.
               </p>
 
-              {/* Main search bar */}
-              <div className="mt-6 relative max-w-md mx-auto">
-                <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                <input
-                  id="main-apps-search-input"
-                  type="text"
-                  value={publicSearchQuery}
-                  onChange={(e) => setPublicSearchQuery(e.target.value)}
-                  placeholder="Search web apps..."
-                  className="w-full pl-9 pr-4 py-2.5 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl text-sm text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm transition-all"
-                />
+              {/* ================================================== */}
+              {/* SEARCH FIELD                                       */}
+              {/* ================================================== */}
+              <div className="mt-8 relative max-w-md sm:max-w-lg mx-auto">
+                <div className="relative group">
+                  <Search className="w-4 h-4 text-neutral-400 group-focus-within:text-amber-400 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none transition-colors duration-200" />
+                  <input
+                    id="main-apps-search-input"
+                    type="text"
+                    value={publicSearchQuery}
+                    onChange={(e) => setPublicSearchQuery(e.target.value)}
+                    placeholder="Search web apps..."
+                    className="w-full pl-11 pr-10 py-3 sm:py-3.5 bg-neutral-900/60 backdrop-blur-xl border border-white/[0.12] rounded-2xl text-sm sm:text-base text-white placeholder-neutral-400 focus:outline-none focus:border-amber-400/50 focus:ring-2 focus:ring-indigo-500/30 focus:shadow-[0_0_25px_rgba(99,102,241,0.25)] transition-all duration-300 shadow-[0_4px_20px_rgba(0,0,0,0.35)]"
+                  />
+                  {publicSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setPublicSearchQuery('')}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1 rounded-lg text-neutral-400 hover:text-white hover:bg-white/[0.08] transition-colors cursor-pointer"
+                      aria-label="Clear search"
+                    >
+                      <span className="text-xs font-bold leading-none">✕</span>
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Main Apps Grid Container */}
-          <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full">
+          {/* ================================================== */}
+          {/* APPLICATION CARDS                                  */}
+          {/* Dynamic real data only (CW app preserved)          */}
+          {/* Mobile: 1 col | Desktop: multi-column              */}
+          {/* ================================================== */}
+          <main className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 flex-1 w-full">
             {isLoadingPublic ? (
-              <div id="public-loading-skeleton" className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 sm:gap-6">
-                {[1, 2, 3, 4, 5, 6].map(n => (
+              <div id="public-loading-skeleton" className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5 sm:gap-6">
+                {[1, 2, 3, 4].map(n => (
                   <div
                     key={n}
-                    className="p-6 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200/80 dark:border-neutral-800 animate-pulse flex flex-col items-center"
+                    className="p-7 bg-neutral-900/40 rounded-[20px] border border-white/[0.06] animate-pulse flex flex-col items-center"
                   >
-                    <div className="w-20 h-20 rounded-2xl bg-neutral-200 dark:bg-neutral-800 mb-4"></div>
-                    <div className="w-24 h-4 rounded bg-neutral-200 dark:bg-neutral-800 mb-2"></div>
-                    <div className="w-16 h-3 rounded bg-neutral-100 dark:bg-neutral-800/60"></div>
+                    <div className="w-20 h-20 rounded-[18px] bg-neutral-800/80 mb-4" />
+                    <div className="w-28 h-5 rounded bg-neutral-800 mb-2" />
+                    <div className="w-20 h-3 rounded bg-neutral-800/60 mb-5" />
+                    <div className="w-full h-10 rounded-xl bg-neutral-800/40" />
                   </div>
                 ))}
               </div>
             ) : filteredPublicApps.length === 0 ? (
-              <div id="public-empty-state" className="text-center py-20 bg-white dark:bg-neutral-900 rounded-3xl border border-neutral-200/80 dark:border-neutral-800 shadow-xs max-w-md mx-auto p-8">
-                <AppWindow className="w-12 h-12 mx-auto mb-3 text-neutral-300 dark:text-neutral-600" />
-                <h3 className="font-bold text-neutral-900 dark:text-neutral-100 text-base">
+              <div id="public-empty-state" className="text-center py-16 sm:py-20 px-6 sm:px-8 bg-neutral-900/50 backdrop-blur-xl rounded-[24px] border border-white/[0.08] shadow-[0_12px_40px_rgba(0,0,0,0.5)] max-w-md mx-auto">
+                <div className="w-16 h-16 rounded-2xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center mx-auto mb-4 text-indigo-400 shadow-inner">
+                  <AppWindow className="w-8 h-8" />
+                </div>
+                <h3 className="font-bold text-white text-lg">
                   {publicSearchQuery ? 'No matching apps found' : 'No Web Apps Available'}
                 </h3>
-                <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
+                <p className="text-sm text-neutral-400 mt-2 max-w-sm mx-auto leading-relaxed">
                   {publicSearchQuery 
                     ? 'Try searching with a different term.' 
                     : 'The administrator has not added any public web applications yet.'}
@@ -534,15 +637,15 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => setPublicSearchQuery('')}
-                    className="mt-4 px-3.5 py-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                    className="mt-5 px-4 py-2 text-xs font-semibold text-amber-300 hover:text-white bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-xl transition-all cursor-pointer"
                   >
                     Clear Search Filter
                   </button>
                 )}
               </div>
             ) : (
-              /* Public Web App Cards Grid */
-              <div id="public-apps-grid" className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6">
+              /* Public Web App Cards Grid: 1 column on mobile, multi-col on tablet/desktop */
+              <div id="public-apps-grid" className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5 sm:gap-6">
                 {filteredPublicApps.map((webApp) => (
                   <WebAppCard
                     key={webApp.id}
@@ -554,11 +657,38 @@ export default function App() {
             )}
           </main>
 
-          {/* Footer */}
-          <footer className="mt-auto border-t border-neutral-200/60 dark:border-neutral-800/80 bg-white/50 dark:bg-neutral-950 py-6 text-center text-xs text-neutral-400 dark:text-neutral-500">
-            <div className="max-w-7xl mx-auto px-4 flex items-center justify-center gap-2">
-              <Server className="w-3.5 h-3.5 text-indigo-500" />
-              <span>Study Network</span>
+          {/* ================================================== */}
+          {/* FOOTER                                             */}
+          {/* Dark glass, subtle border, existing links          */}
+          {/* ================================================== */}
+          <footer className="relative z-10 mt-auto border-t border-white/[0.08] bg-[#070913]/75 backdrop-blur-md py-6 sm:py-7 text-center text-xs text-neutral-400">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Server className="w-3.5 h-3.5 text-amber-400" />
+                <span className="font-medium text-neutral-200">Study Network</span>
+                <span className="text-neutral-600 hidden sm:inline">•</span>
+                <span className="text-neutral-400 hidden sm:inline text-[11px]">Web App Launcher</span>
+              </div>
+
+              <div className="flex items-center gap-4 text-[11px] text-neutral-400">
+                <span>Active Server Gateway</span>
+                <span className="text-neutral-600">•</span>
+                <button
+                  type="button"
+                  onClick={() => setIsAboutOpen(true)}
+                  className="hover:text-amber-300 transition-colors cursor-pointer"
+                >
+                  About Us
+                </button>
+                <span className="text-neutral-600">•</span>
+                <button
+                  type="button"
+                  onClick={() => setIsDrawerOpen(true)}
+                  className="hover:text-amber-300 transition-colors cursor-pointer"
+                >
+                  Menu
+                </button>
+              </div>
             </div>
           </footer>
         </div>

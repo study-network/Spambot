@@ -51,26 +51,26 @@ export const AboutUsAdminSection: React.FC<AboutUsAdminSectionProps> = ({
   const canManageTeamSocial = isMainAdmin || (userPermissions ? userPermissions.includes('MANAGE_TEAM_SOCIAL_LINKS') : true);
   const canReorderMembers = isMainAdmin || (userPermissions ? userPermissions.includes('REORDER_TEAM_MEMBERS') : true);
   // Brand & Intro state
-  const [brandName, setBrandName] = useState('LINK VERSE');
-  const [brandTagline, setBrandTagline] = useState('LEARN • EXPLORE • GROW');
-  const [brandLogo, setBrandLogo] = useState('');
-  const [aboutTitle, setAboutTitle] = useState('About Us');
-  const [aboutDescription, setAboutDescription] = useState('');
-  const [aboutMessageTitle, setAboutMessageTitle] = useState('Knowledge shared is a brighter tomorrow.');
-  const [aboutMessageSubtitle, setAboutMessageSubtitle] = useState('Stay Connected • Stay Curious • Stay Ahead');
+  const [brandName, setBrandName] = useState(settings?.brandName || 'Study Network');
+  const [brandTagline, setBrandTagline] = useState(settings?.brandTagline || '');
+  const [brandLogo, setBrandLogo] = useState(settings?.brandLogo || '');
+  const [aboutTitle, setAboutTitle] = useState(settings?.aboutTitle || 'About Us');
+  const [aboutDescription, setAboutDescription] = useState(settings?.aboutDescription || '');
+  const [aboutMessageTitle, setAboutMessageTitle] = useState(settings?.aboutMessageTitle || '');
+  const [aboutMessageSubtitle, setAboutMessageSubtitle] = useState(settings?.aboutMessageSubtitle || '');
 
   // Developer section state
-  const [developerName, setDeveloperName] = useState('Ritesh');
-  const [developerRole, setDeveloperRole] = useState('Founder & Developer');
-  const [developerDescription, setDeveloperDescription] = useState('');
-  const [developerPhoto, setDeveloperPhoto] = useState('');
-  const [developerTagline, setDeveloperTagline] = useState('Code • Create • Contribute • Grow');
-  const [developerSocialLinks, setDeveloperSocialLinks] = useState<SocialLink[]>([]);
+  const [developerName, setDeveloperName] = useState(settings?.developerName || '');
+  const [developerRole, setDeveloperRole] = useState(settings?.developerRole || '');
+  const [developerDescription, setDeveloperDescription] = useState(settings?.developerDescription || '');
+  const [developerPhoto, setDeveloperPhoto] = useState(settings?.developerPhoto || '');
+  const [developerTagline, setDeveloperTagline] = useState(settings?.developerTagline || '');
+  const [developerSocialLinks, setDeveloperSocialLinks] = useState<SocialLink[]>(settings?.developerSocialLinks ? [...settings.developerSocialLinks] : []);
 
   // Footer banner state
-  const [aboutFooterTitle, setAboutFooterTitle] = useState('Thanks for being a part of LINK VERSE.');
-  const [aboutFooterSubtitle, setAboutFooterSubtitle] = useState('Together, we can make learning simple, free and accessible for everyone.');
-  const [aboutFooterTagline, setAboutFooterTagline] = useState('Keep Learning • Keep Exploring • Keep Growing');
+  const [aboutFooterTitle, setAboutFooterTitle] = useState(settings?.aboutFooterTitle || '');
+  const [aboutFooterSubtitle, setAboutFooterSubtitle] = useState(settings?.aboutFooterSubtitle || '');
+  const [aboutFooterTagline, setAboutFooterTagline] = useState(settings?.aboutFooterTagline || '');
 
   // Team members state
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
@@ -95,24 +95,24 @@ export const AboutUsAdminSection: React.FC<AboutUsAdminSectionProps> = ({
   // Sync settings when props change
   useEffect(() => {
     if (settings) {
-      setBrandName(settings.brandName || 'LINK VERSE');
-      setBrandTagline(settings.brandTagline || 'LEARN • EXPLORE • GROW');
+      setBrandName(settings.brandName || 'Study Network');
+      setBrandTagline(settings.brandTagline || '');
       setBrandLogo(settings.brandLogo || '');
       setAboutTitle(settings.aboutTitle || 'About Us');
       setAboutDescription(settings.aboutDescription || '');
-      setAboutMessageTitle(settings.aboutMessageTitle || 'Knowledge shared is a brighter tomorrow.');
-      setAboutMessageSubtitle(settings.aboutMessageSubtitle || 'Stay Connected • Stay Curious • Stay Ahead');
+      setAboutMessageTitle(settings.aboutMessageTitle || '');
+      setAboutMessageSubtitle(settings.aboutMessageSubtitle || '');
 
-      setDeveloperName(settings.developerName || 'Ritesh');
-      setDeveloperRole(settings.developerRole || 'Founder & Developer');
+      setDeveloperName(settings.developerName || '');
+      setDeveloperRole(settings.developerRole || '');
       setDeveloperDescription(settings.developerDescription || '');
       setDeveloperPhoto(settings.developerPhoto || '');
-      setDeveloperTagline(settings.developerTagline || 'Code • Create • Contribute • Grow');
+      setDeveloperTagline(settings.developerTagline || '');
       setDeveloperSocialLinks(settings.developerSocialLinks ? [...settings.developerSocialLinks] : []);
 
-      setAboutFooterTitle(settings.aboutFooterTitle || 'Thanks for being a part of LINK VERSE.');
-      setAboutFooterSubtitle(settings.aboutFooterSubtitle || 'Together, we can make learning simple, free and accessible for everyone.');
-      setAboutFooterTagline(settings.aboutFooterTagline || 'Keep Learning • Keep Exploring • Keep Growing');
+      setAboutFooterTitle(settings.aboutFooterTitle || '');
+      setAboutFooterSubtitle(settings.aboutFooterSubtitle || '');
+      setAboutFooterTagline(settings.aboutFooterTagline || '');
     }
   }, [settings]);
 
@@ -292,7 +292,7 @@ export const AboutUsAdminSection: React.FC<AboutUsAdminSectionProps> = ({
                   type="text"
                   value={developerName}
                   onChange={(e) => setDeveloperName(e.target.value)}
-                  placeholder="e.g. Ritesh"
+                  placeholder="e.g. Lead Developer"
                   className="w-full px-4 py-2.5 bg-neutral-50 dark:bg-neutral-800/60 border border-neutral-200 dark:border-neutral-700 rounded-xl text-sm text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
@@ -306,7 +306,7 @@ export const AboutUsAdminSection: React.FC<AboutUsAdminSectionProps> = ({
                   type="text"
                   value={developerRole}
                   onChange={(e) => setDeveloperRole(e.target.value)}
-                  placeholder="Founder & Developer"
+                  placeholder="e.g. Founder & Lead Engineer"
                   className="w-full px-4 py-2.5 bg-neutral-50 dark:bg-neutral-800/60 border border-neutral-200 dark:border-neutral-700 rounded-xl text-sm text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
@@ -320,7 +320,7 @@ export const AboutUsAdminSection: React.FC<AboutUsAdminSectionProps> = ({
                   type="text"
                   value={developerTagline}
                   onChange={(e) => setDeveloperTagline(e.target.value)}
-                  placeholder="Code • Create • Contribute • Grow"
+                  placeholder="e.g. Building open tools for everyone"
                   className="w-full px-4 py-2.5 bg-neutral-50 dark:bg-neutral-800/60 border border-neutral-200 dark:border-neutral-700 rounded-xl text-sm text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
@@ -354,7 +354,7 @@ export const AboutUsAdminSection: React.FC<AboutUsAdminSectionProps> = ({
                   type="url"
                   value={developerPhoto}
                   onChange={(e) => setDeveloperPhoto(e.target.value)}
-                  placeholder="https://example.com/ritesh.jpg (leave empty for default initial icon)"
+                  placeholder="https://example.com/photo.jpg (leave empty for default initial icon)"
                   className="flex-1 px-4 py-2.5 bg-neutral-50 dark:bg-neutral-800/60 border border-neutral-200 dark:border-neutral-700 rounded-xl text-sm text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-xs"
                 />
               </div>

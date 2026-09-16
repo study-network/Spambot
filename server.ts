@@ -623,6 +623,11 @@ async function startServer() {
     }
   });
 
+  // Explicit route guards for aliases /api/admin/admins* and /api/admin/accounts*
+  app.all(['/api/admin/admins', '/api/admin/admins/*', '/api/admin/accounts', '/api/admin/accounts/*'], requireAdminAuth, requireMainAdmin, (req, res) => {
+    res.status(403).json({ error: 'Forbidden: Main Admin access required' });
+  });
+
   // ==========================================
   // PROTECTED ADMIN ROUTES (PERMISSION GUARDED)
   // ==========================================

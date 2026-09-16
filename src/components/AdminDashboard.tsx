@@ -89,8 +89,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [activeTab, setActiveTab] = useState<'apps' | 'achievements' | 'message' | 'about' | 'settings' | 'admins'>('apps');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Role & Permissions Determination
-  const isMainAdmin = !currentUser?.role || currentUser.role === 'MAIN_ADMIN';
+  // Role & Permissions Determination (Strict Main Admin Check)
+  const isMainAdmin = Boolean(currentUser && currentUser.role === 'MAIN_ADMIN');
   const userPermissions = currentUser?.permissions || [];
 
   const hasPermission = (perm: AdminPermission): boolean => {
@@ -148,10 +148,71 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const canDeleteWebApp = hasPermission('DELETE_WEBAPP');
   const canToggleServer = hasPermission('EDIT_SERVER');
 
+  // Helper to parse target tab from URL hash or query parameters
+  const parseTabFromLocation = (): 'apps' | 'achievements' | 'message' | 'about' | 'settings' | 'admins' | null => {
+    const hash = window.location.hash.toLowerCase();
+    const searchParams = new URLSearchParams(window.location.search);
+    const tabParam = (searchParams.get('tab') || searchParams.get('section'))?.toLowerCase();
+
+    const isAdminsRequested = 
+      hash.includes('admin-accounts') || 
+      hash.includes('other-admins') || 
+      hash === '#admins' || 
+      hash.startsWith('#admin/admins') || 
+      hash.startsWith('#admin/accounts') ||
+      tabParam === 'admins' || 
+      tabParam === 'admin-accounts' || 
+      tabParam === 'other-admins';
+
+    if (isAdminsRequested) {
+      return 'admins';
+    }
+    if (hash.includes('achievements') || tabParam === 'achievements') return 'achievements';
+    if (hash.includes('message') || tabParam === 'message') return 'message';
+    if (hash.includes('about') || tabParam === 'about') return 'about';
+    if (hash.includes('settings') || tabParam === 'settings') return 'settings';
+    if (hash.includes('apps') || tabParam === 'apps') return 'apps';
+    return null;
+  };
+
+  // Synchronize active tab with URL hash / search params and strictly protect Admin Accounts from Other Admins
+  useEffect(() => {
+    const handleUrlTab = () => {
+      const requestedTab = parseTabFromLocation();
+      if (!requestedTab) return;
+
+      if (requestedTab === 'admins') {
+        if (isMainAdmin) {
+          setActiveTab('admins');
+        } else {
+          // OTHER ADMIN: completely block direct URL navigation to Admin Accounts
+          setActiveTab('apps');
+          if (window.location.hash !== '#admin') {
+            window.location.hash = '#admin';
+          }
+          if (window.location.search.includes('tab=') || window.location.search.includes('section=')) {
+            const cleanUrl = window.location.pathname + '#admin';
+            window.history.replaceState(null, '', cleanUrl);
+          }
+          onNotify?.('error', 'Access Forbidden: Admin Accounts is restricted to Main Admin only.');
+        }
+      } else {
+        setActiveTab(requestedTab);
+      }
+    };
+
+    handleUrlTab();
+    window.addEventListener('hashchange', handleUrlTab);
+    return () => window.removeEventListener('hashchange', handleUrlTab);
+  }, [isMainAdmin, onNotify]);
+
   // If currently active tab is not allowed, auto-switch to first allowed tab
   useEffect(() => {
     if (activeTab === 'admins' && !canViewAdmins) {
       setActiveTab('apps');
+      if (window.location.hash !== '#admin') {
+        window.location.hash = '#admin';
+      }
     } else if (activeTab === 'apps' && !canViewApps) {
       if (canViewAchievements) setActiveTab('achievements');
       else if (canViewMessage) setActiveTab('message');
@@ -317,7 +378,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <button
               id="tab-web-apps"
               type="button"
-              onClick={() => setActiveTab('apps')}
+              onClick={() => {
+                setActiveTab('apps');
+                window.location.hash = '#admin';
+              }}
               className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all cursor-pointer whitespace-nowrap ${
                 activeTab === 'apps'
                   ? 'bg-indigo-600 text-white shadow-sm'
@@ -333,7 +397,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <button
               id="tab-user-achievements"
               type="button"
-              onClick={() => setActiveTab('achievements')}
+              onClick={() => {
+                setActiveTab('achievements');
+                window.location.hash = '#admin';
+              }}
               className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all cursor-pointer whitespace-nowrap ${
                 activeTab === 'achievements'
                   ? 'bg-indigo-600 text-white shadow-sm'
@@ -349,7 +416,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <button
               id="tab-message-notice"
               type="button"
-              onClick={() => setActiveTab('message')}
+              onClick={() => {
+                setActiveTab('message');
+                window.location.hash = '#admin';
+              }}
               className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all cursor-pointer whitespace-nowrap ${
                 activeTab === 'message'
                   ? 'bg-indigo-600 text-white shadow-sm'
@@ -365,7 +435,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <button
               id="tab-about-us-settings"
               type="button"
-              onClick={() => setActiveTab('about')}
+              onClick={() => {
+                setActiveTab('about');
+                window.location.hash = '#admin';
+              }}
               className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all cursor-pointer whitespace-nowrap ${
                 activeTab === 'about'
                   ? 'bg-indigo-600 text-white shadow-sm'
@@ -381,7 +454,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <button
               id="tab-site-settings"
               type="button"
-              onClick={() => setActiveTab('settings')}
+              onClick={() => {
+                setActiveTab('settings');
+                window.location.hash = '#admin';
+              }}
               className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all cursor-pointer whitespace-nowrap ${
                 activeTab === 'settings'
                   ? 'bg-indigo-600 text-white shadow-sm'
@@ -398,7 +474,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <button
               id="tab-admin-accounts"
               type="button"
-              onClick={() => setActiveTab('admins')}
+              onClick={() => {
+                setActiveTab('admins');
+                window.location.hash = '#admin/admins';
+              }}
               className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all cursor-pointer whitespace-nowrap ${
                 activeTab === 'admins'
                   ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-sm'

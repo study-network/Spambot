@@ -10,6 +10,7 @@ import {
   OtherAdminUser,
   AdminPermission,
   NoticeMessage,
+  AdminUser,
 } from '../types.ts';
 
 const TOKEN_KEY = 'web_app_admin_token';
@@ -37,7 +38,7 @@ export function setAuthSession(auth: AuthResponse | null) {
   }
 }
 
-export function getStoredUser() {
+export function getStoredUser(): AdminUser | null {
   try {
     const raw = localStorage.getItem(USER_KEY);
     return raw ? JSON.parse(raw) : null;
@@ -95,9 +96,9 @@ export async function loginAdmin(email: string, password: string): Promise<AuthR
   return data;
 }
 
-export async function checkAuthMe(): Promise<boolean> {
+export async function checkAuthMe(): Promise<AdminUser | null> {
   const token = getAuthToken();
-  if (!token) return false;
+  if (!token) return null;
 
   try {
     const res = await fetch('/api/auth/me', {
@@ -105,11 +106,18 @@ export async function checkAuthMe(): Promise<boolean> {
     });
     if (!res.ok) {
       setAuthSession(null);
-      return false;
+      return null;
     }
-    return true;
+    const data = await res.json();
+    if (data.user) {
+      try {
+        localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+      } catch {}
+      return data.user as AdminUser;
+    }
+    return getStoredUser();
   } catch {
-    return false;
+    return null;
   }
 }
 

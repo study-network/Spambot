@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { X, Send, MessageCircle, Info, Sparkles, Megaphone, Trophy } from 'lucide-react';
 import { SiteSettings } from '../types.ts';
 import { FormattedTextWithLinks } from './FormattedTextWithLinks.tsx';
+import { StudyNetworkLogo } from './StudyNetworkLogo.tsx';
 
 interface NavigationDrawerProps {
   isOpen: boolean;
@@ -37,8 +38,9 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
   const telegramUrl = settings?.telegramUrl || '';
   const whatsappUrl = settings?.whatsappUrl || '';
   const happyTitle = settings?.happyTitle || 'Stay Happy';
-  const happyMessage = settings?.happyMessage || 'Good things take time 💜';
+  const happyMessage = settings?.happyMessage || '';
   const happyIcon = settings?.happyIcon || '💜';
+  const hasHappy = Boolean(happyMessage && happyMessage.trim().length > 0);
   const messageTitle = settings?.messageTitle || 'Message';
   const messageContent = settings?.messageContent || '';
   const hasMessage = Boolean(messageContent && messageContent.trim().length > 0);
@@ -82,7 +84,8 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
             >
               {/* Drawer Header */}
               <div className="flex items-center justify-between px-6 py-5 border-b border-neutral-200/70 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-900/50">
-                <div>
+                <div className="flex items-center gap-3">
+                  <StudyNetworkLogo size={32} />
                   <h2 id="drawer-title" className="font-bold text-lg text-neutral-900 dark:text-neutral-100 tracking-tight leading-snug">
                     Study Network
                   </h2>
@@ -234,29 +237,31 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
                 )}
               </div>
 
-              {/* STAY HAPPY SECTION (At the bottom of the drawer) */}
-              <div
-                id="drawer-stay-happy-section"
-                className="p-5 mx-6 mb-6 rounded-2xl bg-gradient-to-br from-indigo-50/80 via-purple-50/70 to-pink-50/60 dark:from-indigo-950/40 dark:via-purple-950/40 dark:to-pink-950/30 border border-purple-200/70 dark:border-purple-800/50 shadow-sm"
-              >
-                <div className="flex items-start gap-3">
-                  <span className="text-2xl select-none shrink-0" role="img" aria-label="happy icon">
-                    {happyIcon || '💜'}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5 text-purple-900 dark:text-purple-200 font-bold text-sm tracking-tight">
-                      <Sparkles className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400 shrink-0" />
-                      <span>{happyTitle}</span>
+              {/* STAY HAPPY SECTION (At the bottom of the drawer, only if configured) */}
+              {hasHappy && (
+                <div
+                  id="drawer-stay-happy-section"
+                  className="p-5 mx-6 mb-6 rounded-2xl bg-gradient-to-br from-indigo-50/80 via-purple-50/70 to-pink-50/60 dark:from-indigo-950/40 dark:via-purple-950/40 dark:to-pink-950/30 border border-purple-200/70 dark:border-purple-800/50 shadow-sm"
+                >
+                  <div className="flex items-start gap-3">
+                    <span className="text-2xl select-none shrink-0" role="img" aria-label="happy icon">
+                      {happyIcon || '💜'}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 text-purple-900 dark:text-purple-200 font-bold text-sm tracking-tight">
+                        <Sparkles className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400 shrink-0" />
+                        <span>{happyTitle}</span>
+                      </div>
+                      <p className="mt-1 text-xs text-purple-800/80 dark:text-purple-300/80 leading-relaxed break-words whitespace-pre-wrap">
+                        <FormattedTextWithLinks 
+                          text={happyMessage} 
+                          linkClassName="text-purple-950 dark:text-purple-200 underline underline-offset-2 font-semibold hover:opacity-80"
+                        />
+                      </p>
                     </div>
-                    <p className="mt-1 text-xs text-purple-800/80 dark:text-purple-300/80 leading-relaxed break-words whitespace-pre-wrap">
-                      <FormattedTextWithLinks 
-                        text={happyMessage} 
-                        linkClassName="text-purple-950 dark:text-purple-200 underline underline-offset-2 font-semibold hover:opacity-80"
-                      />
-                    </p>
                   </div>
                 </div>
-              </div>
+              )}
             </motion.div>
           </div>
         </div>

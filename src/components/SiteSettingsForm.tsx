@@ -15,9 +15,9 @@ export const SiteSettingsForm: React.FC<SiteSettingsFormProps> = ({
   const [whatsappUrl, setWhatsappUrl] = useState('');
   const [aboutTitle, setAboutTitle] = useState('About Us');
   const [aboutDescription, setAboutDescription] = useState('');
-  const [happyTitle, setHappyTitle] = useState('Stay Happy');
-  const [happyMessage, setHappyMessage] = useState('Good things take time 💜');
-  const [happyIcon, setHappyIcon] = useState('💜');
+  const [happyTitle, setHappyTitle] = useState(settings?.happyTitle || 'Stay Happy');
+  const [happyMessage, setHappyMessage] = useState(settings?.happyMessage || '');
+  const [happyIcon, setHappyIcon] = useState(settings?.happyIcon || '💜');
 
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -30,7 +30,7 @@ export const SiteSettingsForm: React.FC<SiteSettingsFormProps> = ({
       setAboutTitle(settings.aboutTitle || 'About Us');
       setAboutDescription(settings.aboutDescription || '');
       setHappyTitle(settings.happyTitle || 'Stay Happy');
-      setHappyMessage(settings.happyMessage || 'Good things take time 💜');
+      setHappyMessage(settings.happyMessage || '');
       setHappyIcon(settings.happyIcon || '💜');
     }
   }, [settings]);
