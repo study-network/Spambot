@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { SiteSettings } from '../types.ts';
 import { Megaphone, Save, CheckCircle2, AlertCircle, RefreshCw, Sparkles } from 'lucide-react';
+import { FormattedTextWithLinks } from './FormattedTextWithLinks.tsx';
 
 interface MessageNoticeFormProps {
   settings: SiteSettings | null;
@@ -178,7 +179,7 @@ export const MessageNoticeForm: React.FC<MessageNoticeFormProps> = ({
                 </div>
               </div>
               <div className="text-xs text-neutral-700 dark:text-neutral-300 leading-relaxed whitespace-pre-wrap break-words font-normal">
-                {messageContent}
+                <FormattedTextWithLinks text={messageContent} />
               </div>
             </div>
           ) : (

@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Trophy, Calendar, Sparkles, Megaphone, Pin } from 'lucide-react';
 import { Achievement, AchievementMessage } from '../types.ts';
+import { FormattedTextWithLinks } from './FormattedTextWithLinks.tsx';
 
 interface AchievementModalProps {
   isOpen: boolean;
@@ -55,29 +56,6 @@ export const AchievementModal: React.FC<AchievementModalProps> = ({
   const hasAdminMessage = Boolean(
     message && message.content && message.content.trim().length > 0
   );
-
-  // Helper to render text with auto-detected URLs and preserve line breaks
-  const renderTextWithLinks = (text: string) => {
-    const urlRegex = /(https?:\/\/[^\s]+)/g;
-    const parts = text.split(urlRegex);
-    return parts.map((part, i) => {
-      if (part.match(urlRegex)) {
-        return (
-          <a
-            key={i}
-            href={part}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-indigo-600 dark:text-indigo-400 underline hover:text-indigo-500 break-all"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {part}
-          </a>
-        );
-      }
-      return part;
-    });
-  };
 
   return (
     <AnimatePresence>
@@ -165,7 +143,7 @@ export const AchievementModal: React.FC<AchievementModalProps> = ({
                         id="achievement-admin-message-content"
                         className="text-xs sm:text-sm text-neutral-800 dark:text-neutral-200 leading-relaxed whitespace-pre-wrap break-words font-medium pl-0.5"
                       >
-                        {renderTextWithLinks(message.content)}
+                        <FormattedTextWithLinks text={message.content} />
                       </div>
                     </div>
                   )}
@@ -219,7 +197,7 @@ export const AchievementModal: React.FC<AchievementModalProps> = ({
                                   Admin Comment:
                                 </span>
                                 <div className="text-xs sm:text-sm text-neutral-800 dark:text-neutral-200 leading-relaxed whitespace-pre-wrap break-words font-medium pl-0.5">
-                                  {renderTextWithLinks(item.comment)}
+                                  <FormattedTextWithLinks text={item.comment} />
                                 </div>
                               </div>
                             </div>
@@ -271,7 +249,7 @@ export const AchievementModal: React.FC<AchievementModalProps> = ({
 
                               {/* Comment Body */}
                               <div className="text-xs sm:text-sm text-neutral-800 dark:text-neutral-200 leading-relaxed whitespace-pre-wrap break-words font-medium pl-0.5">
-                                {renderTextWithLinks(item.comment)}
+                                <FormattedTextWithLinks text={item.comment} />
                               </div>
                             </div>
                           </article>

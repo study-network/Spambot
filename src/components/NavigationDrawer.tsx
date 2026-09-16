@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Send, MessageCircle, Info, Sparkles, Megaphone, Trophy } from 'lucide-react';
 import { SiteSettings } from '../types.ts';
+import { FormattedTextWithLinks } from './FormattedTextWithLinks.tsx';
 
 interface NavigationDrawerProps {
   isOpen: boolean;
@@ -230,7 +231,7 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
                       </div>
                     </div>
                     <div className="text-xs text-neutral-700 dark:text-neutral-300 leading-relaxed whitespace-pre-wrap break-words font-normal">
-                      {messageContent}
+                      <FormattedTextWithLinks text={messageContent} />
                     </div>
                   </div>
                 )}
@@ -251,7 +252,10 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
                       <span>{happyTitle}</span>
                     </div>
                     <p className="mt-1 text-xs text-purple-800/80 dark:text-purple-300/80 leading-relaxed break-words whitespace-pre-wrap">
-                      {happyMessage}
+                      <FormattedTextWithLinks 
+                        text={happyMessage} 
+                        linkClassName="text-purple-950 dark:text-purple-200 underline underline-offset-2 font-semibold hover:opacity-80"
+                      />
                     </p>
                   </div>
                 </div>

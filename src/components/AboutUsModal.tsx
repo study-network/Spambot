@@ -4,6 +4,7 @@ import { X, Sparkles, Code2, Users, Heart, ShieldCheck } from 'lucide-react';
 import { SiteSettings, TeamMember } from '../types.ts';
 import { SocialIcon } from './SocialIcon.tsx';
 import { fetchPublicTeamMembers } from '../lib/api.ts';
+import { FormattedTextWithLinks } from './FormattedTextWithLinks.tsx';
 
 interface AboutUsModalProps {
   isOpen: boolean;
@@ -176,8 +177,11 @@ export const AboutUsModal: React.FC<AboutUsModalProps> = ({
 
                 {/* Developer Description / Bio */}
                 {developerDescription && (
-                  <p className="text-xs sm:text-sm text-neutral-300/90 leading-relaxed pt-2 border-t border-neutral-800/80">
-                    {developerDescription}
+                  <p className="text-xs sm:text-sm text-neutral-300/90 leading-relaxed pt-2 border-t border-neutral-800/80 whitespace-pre-wrap">
+                    <FormattedTextWithLinks 
+                      text={developerDescription}
+                      linkClassName="text-indigo-400 hover:text-indigo-300 underline underline-offset-2 break-all"
+                    />
                   </p>
                 )}
               </div>
@@ -246,8 +250,11 @@ export const AboutUsModal: React.FC<AboutUsModalProps> = ({
 
                             {/* Member Bio */}
                             {member.description && (
-                              <p className="text-xs text-neutral-400 mt-2.5 line-clamp-2 leading-relaxed">
-                                {member.description}
+                              <p className="text-xs text-neutral-400 mt-2.5 line-clamp-2 leading-relaxed whitespace-pre-wrap">
+                                <FormattedTextWithLinks 
+                                  text={member.description}
+                                  linkClassName="text-indigo-400 hover:text-indigo-300 underline underline-offset-2 break-all"
+                                />
                               </p>
                             )}
                           </div>
