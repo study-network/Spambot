@@ -44,10 +44,39 @@ export interface DashboardStats {
   testingServers: number;
 }
 
+export type AdminRole = 'MAIN_ADMIN' | 'OTHER_ADMIN';
+
+export type AdminPermission =
+  | 'ADD_WEBAPP'
+  | 'EDIT_WEBAPP'
+  | 'DELETE_WEBAPP'
+  | 'ADD_SERVER'
+  | 'EDIT_SERVER'
+  | 'DELETE_SERVER'
+  | 'CHANGE_SERVER_CATEGORY'
+  | 'EDIT_TELEGRAM'
+  | 'EDIT_WHATSAPP'
+  | 'EDIT_ABOUT_US'
+  | 'EDIT_STAY_HAPPY'
+  | 'VIEW_DASHBOARD';
+
+export interface OtherAdminUser {
+  id: string;
+  username: string;
+  role: 'OTHER_ADMIN';
+  isActive: boolean;
+  permissions: AdminPermission[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AdminUser {
   id: string;
-  email: string;
-  role: string;
+  username?: string;
+  email?: string;
+  role: AdminRole | string;
+  isActive?: boolean;
+  permissions?: AdminPermission[];
 }
 
 export interface AuthResponse {

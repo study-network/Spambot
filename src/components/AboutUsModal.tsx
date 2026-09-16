@@ -94,7 +94,7 @@ export const AboutUsModal: React.FC<AboutUsModalProps> = ({
                     {brandName}
                   </h2>
                   <p className="text-[10px] font-semibold uppercase tracking-widest text-purple-400">
-                    {brandTagline}
+                    <FormattedTextWithLinks text={brandTagline} linkClassName="text-purple-300 underline underline-offset-2" />
                   </p>
                 </div>
               </div>
@@ -117,12 +117,12 @@ export const AboutUsModal: React.FC<AboutUsModalProps> = ({
                 id="about-message-banner"
                 className="relative p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-indigo-950/40 via-neutral-900 to-purple-950/30 border border-indigo-900/40 text-center space-y-1.5"
               >
-                <p className="text-sm sm:text-base font-semibold text-neutral-100 leading-snug">
-                  "{aboutMessageTitle}"
-                </p>
-                <p className="text-xs font-medium text-purple-300/90 tracking-wide">
-                  {aboutMessageSubtitle}
-                </p>
+                <div className="text-sm sm:text-base font-semibold text-neutral-100 leading-snug whitespace-pre-wrap break-words">
+                  "<FormattedTextWithLinks text={aboutMessageTitle} linkClassName="text-purple-300 hover:text-purple-200 underline underline-offset-2 break-all font-semibold" />"
+                </div>
+                <div className="text-xs font-medium text-purple-300/90 tracking-wide whitespace-pre-wrap break-words">
+                  <FormattedTextWithLinks text={aboutMessageSubtitle} linkClassName="text-purple-200 hover:text-white underline underline-offset-2 break-all font-semibold" />
+                </div>
               </div>
 
               {/* CARD 2: DEVELOPER SECTION */}
@@ -156,12 +156,12 @@ export const AboutUsModal: React.FC<AboutUsModalProps> = ({
                           {developerName}
                         </h3>
                         <span className="text-[11px] font-semibold px-2 py-0.5 bg-indigo-500/15 text-indigo-300 border border-indigo-500/25 rounded-full">
-                          {developerRole}
+                          <FormattedTextWithLinks text={developerRole} linkClassName="text-indigo-200 underline underline-offset-2" />
                         </span>
                       </div>
-                      <p className="text-xs font-medium text-purple-400 mt-1">
-                        {developerTagline}
-                      </p>
+                      <div className="text-xs font-medium text-purple-400 mt-1 whitespace-pre-wrap break-words">
+                        <FormattedTextWithLinks text={developerTagline} linkClassName="text-indigo-300 hover:text-indigo-200 underline underline-offset-2 break-all" />
+                      </div>
                     </div>
                   </div>
 
@@ -232,8 +232,8 @@ export const AboutUsModal: React.FC<AboutUsModalProps> = ({
                                   <h4 className="text-sm font-bold text-white truncate">
                                     {member.name}
                                   </h4>
-                                  <span className="text-[11px] font-medium text-purple-400 truncate block">
-                                    {member.role}
+                                  <span className="text-[11px] font-medium text-purple-400 block">
+                                    <FormattedTextWithLinks text={member.role} linkClassName="text-purple-300 underline underline-offset-2" />
                                   </span>
                                 </div>
                               </div>
@@ -250,10 +250,10 @@ export const AboutUsModal: React.FC<AboutUsModalProps> = ({
 
                             {/* Member Bio */}
                             {member.description && (
-                              <p className="text-xs text-neutral-400 mt-2.5 line-clamp-2 leading-relaxed whitespace-pre-wrap">
+                              <p className="text-xs text-neutral-400 mt-2.5 leading-relaxed whitespace-pre-wrap break-words">
                                 <FormattedTextWithLinks 
                                   text={member.description}
-                                  linkClassName="text-indigo-400 hover:text-indigo-300 underline underline-offset-2 break-all"
+                                  linkClassName="text-indigo-400 hover:text-indigo-300 underline underline-offset-2 break-all font-medium"
                                 />
                               </p>
                             )}
@@ -270,15 +270,24 @@ export const AboutUsModal: React.FC<AboutUsModalProps> = ({
                 id="about-footer-banner"
                 className="p-4 sm:p-5 rounded-2xl bg-neutral-950/60 border border-neutral-800/90 text-center space-y-1.5"
               >
-                <p className="text-xs sm:text-sm font-bold text-white">
-                  {aboutFooterTitle}
-                </p>
-                <p className="text-xs text-neutral-400">
-                  {aboutFooterSubtitle}
-                </p>
-                <p className="text-[11px] font-semibold text-purple-400 tracking-wider pt-1">
-                  {aboutFooterTagline}
-                </p>
+                <div className="text-xs sm:text-sm font-bold text-white whitespace-pre-wrap break-words">
+                  <FormattedTextWithLinks 
+                    text={aboutFooterTitle}
+                    linkClassName="text-indigo-400 hover:text-indigo-300 underline underline-offset-2 break-all"
+                  />
+                </div>
+                <div className="text-xs text-neutral-400 whitespace-pre-wrap break-words">
+                  <FormattedTextWithLinks 
+                    text={aboutFooterSubtitle}
+                    linkClassName="text-indigo-400 hover:text-indigo-300 underline underline-offset-2 break-all"
+                  />
+                </div>
+                <div className="text-[11px] font-semibold text-purple-400 tracking-wider pt-1 whitespace-pre-wrap break-words">
+                  <FormattedTextWithLinks 
+                    text={aboutFooterTagline}
+                    linkClassName="text-purple-300 hover:text-purple-200 underline underline-offset-2 break-all"
+                  />
+                </div>
               </div>
             </div>
 

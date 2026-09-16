@@ -26,6 +26,7 @@ import {
   deleteTeamMember,
   reorderTeamMembers 
 } from '../lib/api.ts';
+import { FormattedTextWithLinks } from './FormattedTextWithLinks.tsx';
 
 interface AboutUsAdminSectionProps {
   settings: SiteSettings | null;
@@ -478,9 +479,9 @@ export const AboutUsAdminSection: React.FC<AboutUsAdminSectionProps> = ({
                           </div>
 
                           {member.description && (
-                            <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5 line-clamp-1 max-w-xl">
-                              {member.description}
-                            </p>
+                            <div className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5 line-clamp-1 max-w-xl">
+                              <FormattedTextWithLinks text={member.description} linkClassName="text-indigo-600 dark:text-indigo-400 hover:underline break-all" />
+                            </div>
                           )}
 
                           {/* Social links preview */}

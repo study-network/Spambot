@@ -126,6 +126,26 @@ export async function initDatabase(): Promise<Database> {
       updated_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_team_members_sort ON team_members(sort_order ASC, created_at ASC);
+
+    CREATE TABLE IF NOT EXISTS other_admins (
+      id TEXT PRIMARY KEY,
+      username TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'OTHER_ADMIN',
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS admin_permissions (
+      id TEXT PRIMARY KEY,
+      admin_id TEXT NOT NULL REFERENCES other_admins(id) ON DELETE CASCADE,
+      permission TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_admin_perm ON admin_permissions(admin_id, permission);
+    CREATE INDEX IF NOT EXISTS idx_other_admins_user ON other_admins(username);
   `);
 
   // Migrate servers table if existing table lacks 'Some Error' category
@@ -1647,3 +1667,284 @@ export function deleteAchievement(id: string): boolean {
   saveDb();
   return true;
 }
+
+// ==========================================
+// TWO-LEVEL ADMIN SYSTEM (OTHER ADMINS & PERMISSIONS)
+// ==========================================
+
+export interface OtherAdminRecord {
+  id: string;
+  username: string;
+  role: 'OTHER_ADMIN';
+  isActive: boolean;
+  permissions: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function getAdminPermissions(adminId: string): string[] {
+  const database = getDb();
+  const stmt = database.prepare(`SELECT permission FROM admin_permissions WHERE admin_id = ? ORDER BY permission ASC`);
+  stmt.bind([adminId]);
+  const perms: string[] = [];
+  while (stmt.step()) {
+    const row = stmt.get();
+    perms.push(String(row[0]));
+  }
+  stmt.free();
+  return perms;
+}
+
+export function getAllOtherAdmins(): OtherAdminRecord[] {
+  const database = getDb();
+  const stmt = database.prepare(`
+    SELECT id, username, role, is_active, created_at, updated_at 
+    FROM other_admins 
+    ORDER BY created_at DESC
+  `);
+  const admins: OtherAdminRecord[] = [];
+  while (stmt.step()) {
+    const row = stmt.get();
+    const id = String(row[0]);
+    admins.push({
+      id,
+      username: String(row[1]),
+      role: 'OTHER_ADMIN',
+      isActive: Number(row[3]) === 1,
+      permissions: getAdminPermissions(id),
+      createdAt: String(row[4]),
+      updatedAt: String(row[5]),
+    });
+  }
+  stmt.free();
+  return admins;
+}
+
+export function getOtherAdminById(id: string): OtherAdminRecord | null {
+  const database = getDb();
+  const stmt = database.prepare(`
+    SELECT id, username, role, is_active, created_at, updated_at 
+    FROM other_admins 
+    WHERE id = ? LIMIT 1
+  `);
+  stmt.bind([id]);
+  if (!stmt.step()) {
+    stmt.free();
+    return null;
+  }
+  const row = stmt.get();
+  stmt.free();
+  const idVal = String(row[0]);
+  return {
+    id: idVal,
+    username: String(row[1]),
+    role: 'OTHER_ADMIN',
+    isActive: Number(row[3]) === 1,
+    permissions: getAdminPermissions(idVal),
+    createdAt: String(row[4]),
+    updatedAt: String(row[5]),
+  };
+}
+
+export function getOtherAdminByUsername(username: string): (OtherAdminRecord & { passwordHash: string }) | null {
+  const database = getDb();
+  const stmt = database.prepare(`
+    SELECT id, username, password_hash, role, is_active, created_at, updated_at 
+    FROM other_admins 
+    WHERE LOWER(username) = ? LIMIT 1
+  `);
+  stmt.bind([username.toLowerCase().trim()]);
+  if (!stmt.step()) {
+    stmt.free();
+    return null;
+  }
+  const row = stmt.get();
+  stmt.free();
+  const id = String(row[0]);
+  return {
+    id,
+    username: String(row[1]),
+    passwordHash: String(row[2]),
+    role: 'OTHER_ADMIN',
+    isActive: Number(row[4]) === 1,
+    permissions: getAdminPermissions(id),
+    createdAt: String(row[5]),
+    updatedAt: String(row[6]),
+  };
+}
+
+export function createOtherAdmin(
+  username: string,
+  password: string,
+  permissions: string[] = [],
+  isActive: boolean = true
+): OtherAdminRecord {
+  const database = getDb();
+  const cleanUsername = username.trim();
+  if (cleanUsername.length < 3) {
+    throw new Error('Admin ID / Username must be at least 3 characters long');
+  }
+
+  const existing = getOtherAdminByUsername(cleanUsername);
+  if (existing) {
+    throw new Error(`An administrator with ID/username "${cleanUsername}" already exists`);
+  }
+
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  const salt = bcrypt.genSaltSync(10);
+  const hash = bcrypt.hashSync(password, salt);
+
+  database.run('BEGIN TRANSACTION;');
+  try {
+    const stmt = database.prepare(`
+      INSERT INTO other_admins (id, username, password_hash, role, is_active, created_at, updated_at)
+      VALUES (?, ?, ?, 'OTHER_ADMIN', ?, ?, ?)
+    `);
+    stmt.run([id, cleanUsername, hash, isActive ? 1 : 0, now, now]);
+    stmt.free();
+
+    if (permissions.length > 0) {
+      const pStmt = database.prepare(`
+        INSERT INTO admin_permissions (id, admin_id, permission, created_at)
+        VALUES (?, ?, ?, ?)
+      `);
+      for (const p of permissions) {
+        if (typeof p === 'string' && p.trim()) {
+          pStmt.run([crypto.randomUUID(), id, p.trim(), now]);
+        }
+      }
+      pStmt.free();
+    }
+
+    database.run('COMMIT;');
+    saveDb();
+    const created = getOtherAdminById(id);
+    if (!created) throw new Error('Failed to retrieve created administrator');
+    return created;
+  } catch (err) {
+    database.run('ROLLBACK;');
+    throw err;
+  }
+}
+
+export function updateOtherAdmin(
+  id: string,
+  updates: {
+    username?: string;
+    password?: string;
+    permissions?: string[];
+    isActive?: boolean;
+  }
+): OtherAdminRecord {
+  const database = getDb();
+  const existing = getOtherAdminById(id);
+  if (!existing) {
+    throw new Error('Other Admin not found');
+  }
+
+  const now = new Date().toISOString();
+  let newUsername = existing.username;
+
+  if (updates.username !== undefined) {
+    const cleanUser = updates.username.trim();
+    if (cleanUser.length < 3) {
+      throw new Error('Admin ID / Username must be at least 3 characters long');
+    }
+    if (cleanUser.toLowerCase() !== existing.username.toLowerCase()) {
+      const dupe = getOtherAdminByUsername(cleanUser);
+      if (dupe && dupe.id !== id) {
+        throw new Error(`Username "${cleanUser}" is already taken by another administrator`);
+      }
+    }
+    newUsername = cleanUser;
+  }
+
+  const newIsActive = updates.isActive !== undefined ? (updates.isActive ? 1 : 0) : (existing.isActive ? 1 : 0);
+
+  database.run('BEGIN TRANSACTION;');
+  try {
+    if (updates.password && updates.password.trim()) {
+      const salt = bcrypt.genSaltSync(10);
+      const hash = bcrypt.hashSync(updates.password.trim(), salt);
+      const stmt = database.prepare(`
+        UPDATE other_admins
+        SET username = ?, password_hash = ?, is_active = ?, updated_at = ?
+        WHERE id = ?
+      `);
+      stmt.run([newUsername, hash, newIsActive, now, id]);
+      stmt.free();
+    } else {
+      const stmt = database.prepare(`
+        UPDATE other_admins
+        SET username = ?, is_active = ?, updated_at = ?
+        WHERE id = ?
+      `);
+      stmt.run([newUsername, newIsActive, now, id]);
+      stmt.free();
+    }
+
+    if (Array.isArray(updates.permissions)) {
+      const delStmt = database.prepare(`DELETE FROM admin_permissions WHERE admin_id = ?`);
+      delStmt.run([id]);
+      delStmt.free();
+
+      if (updates.permissions.length > 0) {
+        const pStmt = database.prepare(`
+          INSERT INTO admin_permissions (id, admin_id, permission, created_at)
+          VALUES (?, ?, ?, ?)
+        `);
+        for (const p of updates.permissions) {
+          if (typeof p === 'string' && p.trim()) {
+            pStmt.run([crypto.randomUUID(), id, p.trim(), now]);
+          }
+        }
+        pStmt.free();
+      }
+    }
+
+    database.run('COMMIT;');
+    saveDb();
+    const updated = getOtherAdminById(id);
+    if (!updated) throw new Error('Failed to retrieve updated administrator');
+    return updated;
+  } catch (err) {
+    database.run('ROLLBACK;');
+    throw err;
+  }
+}
+
+export function toggleOtherAdminStatus(id: string, isActive?: boolean): OtherAdminRecord {
+  const existing = getOtherAdminById(id);
+  if (!existing) {
+    throw new Error('Other Admin not found');
+  }
+  const nextActive = isActive !== undefined ? isActive : !existing.isActive;
+  return updateOtherAdmin(id, { isActive: nextActive });
+}
+
+export function deleteOtherAdmin(id: string): boolean {
+  const database = getDb();
+  const existing = getOtherAdminById(id);
+  if (!existing) {
+    return false;
+  }
+  database.run('BEGIN TRANSACTION;');
+  try {
+    const pStmt = database.prepare(`DELETE FROM admin_permissions WHERE admin_id = ?`);
+    pStmt.run([id]);
+    pStmt.free();
+
+    const stmt = database.prepare(`DELETE FROM other_admins WHERE id = ?`);
+    stmt.run([id]);
+    stmt.free();
+
+    database.run('COMMIT;');
+    saveDb();
+    return true;
+  } catch (err) {
+    database.run('ROLLBACK;');
+    throw err;
+  }
+}
+

@@ -1,8 +1,8 @@
 import React from 'react';
 
 // Regex to capture URL tokens in plain text
-// Matches URLs with http://, https://, www., or standard domains with paths/queries/hashes
-const URL_SPLIT_REGEX = /((?:https?:\/\/|www\.)[^\s<>"'`]+|(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+(?:com|org|net|edu|gov|mil|io|me|in|co|app|dev|xyz|info|link|site|online|live|tech|club|store|blog|tv)(?:\/[^\s<>"'`]*)?)/gi;
+// Matches URLs with http://, https://, www., common web TLDs (including me, be, cc, ly, ai, etc.), or any domain with a path
+const URL_SPLIT_REGEX = /((?:https?:\/\/|www\.)[^\s<>"'`]+|(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+(?:com|org|net|edu|gov|mil|io|me|in|co|app|dev|xyz|info|link|site|online|live|tech|club|store|blog|tv|be|cc|gg|ly|gl|ai|pro|top|is|uk|us|ca|de|jp|ru|fr|au|nl|it|es|ch|se|no|br|za|media|space|cloud|work|guru|design|news|agency|world|digital)(?:\/[^\s<>"'`]*)?|(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}\/[^\s<>"'`]*)/gi;
 
 interface FormattedTextWithLinksProps {
   text?: string | null;

@@ -7,6 +7,8 @@ import {
   Achievement,
   AchievementMessage,
   TeamMember,
+  OtherAdminUser,
+  AdminPermission,
 } from '../types.ts';
 
 const TOKEN_KEY = 'web_app_admin_token';
@@ -406,3 +408,79 @@ export async function reorderTeamMembers(ids: string[]): Promise<TeamMember[]> {
   }
   return data.members;
 }
+
+// Other Admins Management API (MAIN ADMIN only)
+export async function fetchOtherAdmins(): Promise<OtherAdminUser[]> {
+  const res = await fetch('/api/admin/other-admins', {
+    headers: getHeaders(true),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to fetch other admins');
+  }
+  return res.json();
+}
+
+export async function createOtherAdmin(payload: {
+  username: string;
+  password: string;
+  permissions: AdminPermission[];
+  isActive?: boolean;
+}): Promise<OtherAdminUser> {
+  const res = await fetch('/api/admin/other-admins', {
+    method: 'POST',
+    headers: getHeaders(true),
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || 'Failed to create other admin');
+  }
+  return data;
+}
+
+export async function updateOtherAdmin(
+  id: string,
+  payload: {
+    username?: string;
+    password?: string;
+    permissions?: AdminPermission[];
+    isActive?: boolean;
+  }
+): Promise<OtherAdminUser> {
+  const res = await fetch(`/api/admin/other-admins/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: getHeaders(true),
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || 'Failed to update other admin');
+  }
+  return data;
+}
+
+export async function toggleOtherAdminStatus(id: string, isActive?: boolean): Promise<OtherAdminUser> {
+  const res = await fetch(`/api/admin/other-admins/${encodeURIComponent(id)}/status`, {
+    method: 'PATCH',
+    headers: getHeaders(true),
+    body: JSON.stringify({ isActive }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || 'Failed to toggle admin status');
+  }
+  return data;
+}
+
+export async function deleteOtherAdmin(id: string): Promise<void> {
+  const res = await fetch(`/api/admin/other-admins/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: getHeaders(true),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Failed to delete other admin');
+  }
+}
+

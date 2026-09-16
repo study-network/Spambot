@@ -35,34 +35,175 @@ import {
   updateTeamMember,
   deleteTeamMember,
   reorderTeamMembers,
+  getAllOtherAdmins,
+  getOtherAdminById,
+  getOtherAdminByUsername,
+  createOtherAdmin,
+  updateOtherAdmin,
+  toggleOtherAdminStatus,
+  deleteOtherAdmin,
 } from './server/db.ts';
 
 const PORT = 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'secret-admin-token-link-manager-key-2026';
 
-interface AuthRequest extends Request {
-  user?: {
-    id: string;
-    email: string;
-    role: string;
-  };
+export type AdminRole = 'MAIN_ADMIN' | 'OTHER_ADMIN';
+
+export type AdminPermission =
+  | 'ADD_WEBAPP'
+  | 'EDIT_WEBAPP'
+  | 'DELETE_WEBAPP'
+  | 'ADD_SERVER'
+  | 'EDIT_SERVER'
+  | 'DELETE_SERVER'
+  | 'CHANGE_SERVER_CATEGORY'
+  | 'EDIT_TELEGRAM'
+  | 'EDIT_WHATSAPP'
+  | 'EDIT_ABOUT_US'
+  | 'EDIT_STAY_HAPPY'
+  | 'VIEW_DASHBOARD';
+
+export const ALL_PERMISSIONS: AdminPermission[] = [
+  'ADD_WEBAPP',
+  'EDIT_WEBAPP',
+  'DELETE_WEBAPP',
+  'ADD_SERVER',
+  'EDIT_SERVER',
+  'DELETE_SERVER',
+  'CHANGE_SERVER_CATEGORY',
+  'EDIT_TELEGRAM',
+  'EDIT_WHATSAPP',
+  'EDIT_ABOUT_US',
+  'EDIT_STAY_HAPPY',
+  'VIEW_DASHBOARD',
+];
+
+interface AuthUser {
+  id: string;
+  username: string;
+  email?: string;
+  role: AdminRole;
+  isActive: boolean;
+  permissions: AdminPermission[];
 }
 
-// Authentication middleware
+interface AuthRequest extends Request {
+  user?: AuthUser;
+}
+
+// Retrieves Main Admin credentials exclusively from server environment variables
+function getMainAdminCredentials() {
+  const id = (
+    process.env.MAIN_ADMIN_ID ||
+    process.env.ADMIN_ID ||
+    process.env.ADMIN_USERNAME ||
+    'admin'
+  ).trim();
+  const password = (
+    process.env.MAIN_ADMIN_PASSWORD ||
+    process.env.ADMIN_PASSWORD ||
+    'admin'
+  ).trim();
+  return { id, password };
+}
+
+// Authentication middleware supporting MAIN_ADMIN and OTHER_ADMIN
 function requireAdminAuth(req: AuthRequest, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Unauthorized: Missing or invalid token' });
+    return res.status(401).json({ error: 'Unauthorized: Missing or invalid authentication token' });
   }
 
   const token = authHeader.split(' ')[1];
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as { id: string; email: string; role: string };
-    req.user = decoded;
-    next();
+    const decoded = jwt.verify(token, JWT_SECRET) as {
+      id: string;
+      username?: string;
+      email?: string;
+      role: string;
+    };
+
+    if (decoded.role === 'MAIN_ADMIN' || decoded.role === 'admin') {
+      const mainAdmin = getMainAdminCredentials();
+      req.user = {
+        id: 'main-admin',
+        username: mainAdmin.id,
+        email: mainAdmin.id,
+        role: 'MAIN_ADMIN',
+        isActive: true,
+        permissions: [...ALL_PERMISSIONS],
+      };
+      return next();
+    }
+
+    if (decoded.role === 'OTHER_ADMIN') {
+      const admin = getOtherAdminById(decoded.id);
+      if (!admin) {
+        return res.status(401).json({ error: 'Administrator account not found or was removed' });
+      }
+      if (!admin.isActive) {
+        return res.status(403).json({ error: 'This administrator account is disabled. Please contact the Main Admin.' });
+      }
+      req.user = {
+        id: admin.id,
+        username: admin.username,
+        email: admin.username,
+        role: 'OTHER_ADMIN',
+        isActive: admin.isActive,
+        permissions: admin.permissions as AdminPermission[],
+      };
+      return next();
+    }
+
+    return res.status(401).json({ error: 'Unauthorized: Unrecognized admin role' });
   } catch (err) {
-    return res.status(401).json({ error: 'Unauthorized: Token expired or invalid' });
+    return res.status(401).json({ error: 'Unauthorized: Token has expired or is invalid' });
   }
+}
+
+// Strictly requires MAIN_ADMIN role
+function requireMainAdmin(req: AuthRequest, res: Response, next: NextFunction) {
+  if (!req.user || req.user.role !== 'MAIN_ADMIN') {
+    return res.status(403).json({ error: 'Forbidden: Main Admin access required' });
+  }
+  next();
+}
+
+// Requires a specific permission (MAIN_ADMIN bypasses all permission checks)
+function requirePermission(permission: AdminPermission) {
+  return (req: AuthRequest, res: Response, next: NextFunction) => {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    if (req.user.role === 'MAIN_ADMIN') {
+      return next();
+    }
+    if (req.user.permissions && req.user.permissions.includes(permission)) {
+      return next();
+    }
+    return res.status(403).json({
+      error: `Forbidden: Missing required permission (${permission})`,
+    });
+  };
+}
+
+// Requires at least one of the provided permissions
+function requireAnyPermission(permissions: AdminPermission[]) {
+  return (req: AuthRequest, res: Response, next: NextFunction) => {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    if (req.user.role === 'MAIN_ADMIN') {
+      return next();
+    }
+    const hasPerm = permissions.some((p) => req.user?.permissions?.includes(p));
+    if (hasPerm) {
+      return next();
+    }
+    return res.status(403).json({
+      error: `Forbidden: Missing required permission for this section (${permissions.join(', ')})`,
+    });
+  };
 }
 
 // URL validator
@@ -214,78 +355,101 @@ async function startServer() {
   });
 
   // ==========================================
-  // AUTHENTICATION ROUTES
+  // AUTHENTICATION ROUTES (TWO-LEVEL ADMIN SYSTEM)
   // ==========================================
 
-  // Admin Login
+  // Admin Login: Authenticates MAIN_ADMIN (via env vars) or OTHER_ADMIN (via database)
   app.post('/api/auth/login', (req, res) => {
     try {
       const { email, username, password } = req.body;
-      const loginId = (email || username || '').trim();
+      const loginId = (username || email || '').trim();
       if (!loginId || !password) {
-        return res.status(400).json({ error: 'Email/Username and password are required' });
+        return res.status(400).json({ error: 'Admin ID/Username and password are required' });
       }
 
-      // Check environment variables credentials first (.env support)
-      const envAdminId = (process.env.ADMIN_ID || process.env.ADMIN_USERNAME || 'admin').toLowerCase().trim();
-      const envEmail = (process.env.ADMIN_EMAIL || '').toLowerCase().trim();
-      const envPass = process.env.ADMIN_PASSWORD;
+      const mainAdmin = getMainAdminCredentials();
 
-      const inputId = loginId.toLowerCase();
-      const matchesEnv = Boolean(
-        envPass &&
-        password === envPass &&
-        (inputId === envAdminId || (envEmail && inputId === envEmail) || (inputId === 'admin' && envAdminId === 'admin'))
-      );
-
-      // Check user by provided identifier in database
-      let user = getUserByEmail(loginId);
-      if (!user && loginId.toLowerCase() === 'admin') {
-        user = getUserByEmail('admin@example.com');
-      }
-
-      if (matchesEnv) {
-        // Authenticated via environment variables (.env)
-        const effectiveId = user ? user.id : 'env-admin';
-        const effectiveEmail = user ? user.email : (envAdminId || envEmail || 'admin');
+      // 1. Check if login credentials match MAIN_ADMIN in environment variables
+      if (
+        loginId.toLowerCase() === mainAdmin.id.toLowerCase() &&
+        password === mainAdmin.password
+      ) {
         const token = jwt.sign(
-          { id: effectiveId, email: effectiveEmail, role: 'admin' },
+          { id: 'main-admin', username: mainAdmin.id, role: 'MAIN_ADMIN' },
           JWT_SECRET,
           { expiresIn: '7d' }
         );
         return res.json({
           token,
           user: {
-            id: effectiveId,
-            email: effectiveEmail,
-            role: 'admin',
+            id: 'main-admin',
+            username: mainAdmin.id,
+            email: mainAdmin.id,
+            role: 'MAIN_ADMIN',
+            isActive: true,
+            permissions: [...ALL_PERMISSIONS],
           },
         });
       }
 
-      if (!user) {
-        return res.status(401).json({ error: 'Invalid email or password' });
+      // 2. Check if login credentials match OTHER_ADMIN in database
+      const otherAdmin = getOtherAdminByUsername(loginId);
+      if (otherAdmin) {
+        if (!otherAdmin.isActive) {
+          return res.status(403).json({
+            error: 'This administrator account has been disabled. Please contact the Main Admin.',
+          });
+        }
+
+        const isMatch = bcrypt.compareSync(password, otherAdmin.passwordHash);
+        if (!isMatch) {
+          return res.status(401).json({ error: 'Invalid ID/username or password' });
+        }
+
+        const token = jwt.sign(
+          { id: otherAdmin.id, username: otherAdmin.username, role: 'OTHER_ADMIN' },
+          JWT_SECRET,
+          { expiresIn: '7d' }
+        );
+
+        return res.json({
+          token,
+          user: {
+            id: otherAdmin.id,
+            username: otherAdmin.username,
+            email: otherAdmin.username,
+            role: 'OTHER_ADMIN',
+            isActive: otherAdmin.isActive,
+            permissions: otherAdmin.permissions,
+          },
+        });
       }
 
-      const isMatch = bcrypt.compareSync(password, user.passwordHash);
-      if (!isMatch) {
-        return res.status(401).json({ error: 'Invalid email or password' });
+      // 3. Fallback compatibility with legacy users table if any exists
+      const legacyUser = getUserByEmail(loginId);
+      if (legacyUser) {
+        const isMatch = bcrypt.compareSync(password, legacyUser.passwordHash);
+        if (isMatch) {
+          const token = jwt.sign(
+            { id: 'main-admin', username: mainAdmin.id, role: 'MAIN_ADMIN' },
+            JWT_SECRET,
+            { expiresIn: '7d' }
+          );
+          return res.json({
+            token,
+            user: {
+              id: 'main-admin',
+              username: mainAdmin.id,
+              email: mainAdmin.id,
+              role: 'MAIN_ADMIN',
+              isActive: true,
+              permissions: [...ALL_PERMISSIONS],
+            },
+          });
+        }
       }
 
-      const token = jwt.sign(
-        { id: user.id, email: user.email, role: user.role },
-        JWT_SECRET,
-        { expiresIn: '7d' }
-      );
-
-      res.json({
-        token,
-        user: {
-          id: user.id,
-          email: user.email,
-          role: user.role,
-        },
-      });
+      return res.status(401).json({ error: 'Invalid ID/username or password' });
     } catch (err: any) {
       console.error('Login error:', err);
       res.status(500).json({ error: 'Internal server error during login' });
@@ -298,11 +462,127 @@ async function startServer() {
   });
 
   // ==========================================
-  // PROTECTED ADMIN ROUTES
+  // MAIN ADMIN EXCLUSIVE ROUTES (OTHER ADMINS MANAGEMENT)
+  // ==========================================
+
+  // List all Other Admins
+  app.get('/api/admin/other-admins', requireAdminAuth, requireMainAdmin, (req: AuthRequest, res) => {
+    try {
+      const admins = getAllOtherAdmins();
+      res.json(admins);
+    } catch (err: any) {
+      console.error('Error fetching other admins:', err);
+      res.status(500).json({ error: 'Failed to retrieve administrators' });
+    }
+  });
+
+  // Create a new Other Admin
+  app.post('/api/admin/other-admins', requireAdminAuth, requireMainAdmin, (req: AuthRequest, res) => {
+    try {
+      const { username, password, permissions, isActive } = req.body;
+      if (!username || typeof username !== 'string' || username.trim().length < 3) {
+        return res.status(400).json({ error: 'Admin ID / Username must be at least 3 characters long' });
+      }
+      if (!password || typeof password !== 'string' || password.length < 4) {
+        return res.status(400).json({ error: 'Password must be at least 4 characters long' });
+      }
+
+      const mainAdmin = getMainAdminCredentials();
+      if (username.trim().toLowerCase() === mainAdmin.id.toLowerCase()) {
+        return res.status(400).json({ error: 'Cannot create an Other Admin using the Main Admin ID' });
+      }
+
+      const validPerms = Array.isArray(permissions)
+        ? permissions.filter((p: any) => ALL_PERMISSIONS.includes(p))
+        : [];
+
+      const created = createOtherAdmin(
+        username.trim(),
+        password,
+        validPerms,
+        isActive !== false
+      );
+      res.status(201).json(created);
+    } catch (err: any) {
+      console.error('Error creating other admin:', err);
+      res.status(400).json({ error: err.message || 'Failed to create administrator' });
+    }
+  });
+
+  // Update an existing Other Admin (permissions, username, optional password reset, active state)
+  app.put('/api/admin/other-admins/:id', requireAdminAuth, requireMainAdmin, (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const { username, password, permissions, isActive } = req.body;
+
+      if (username !== undefined) {
+        if (!username || typeof username !== 'string' || username.trim().length < 3) {
+          return res.status(400).json({ error: 'Admin ID / Username must be at least 3 characters long' });
+        }
+        const mainAdmin = getMainAdminCredentials();
+        if (username.trim().toLowerCase() === mainAdmin.id.toLowerCase()) {
+          return res.status(400).json({ error: 'Cannot use the Main Admin ID for an Other Admin' });
+        }
+      }
+
+      if (password !== undefined && password !== '') {
+        if (typeof password !== 'string' || password.length < 4) {
+          return res.status(400).json({ error: 'Password must be at least 4 characters long' });
+        }
+      }
+
+      const validPerms = Array.isArray(permissions)
+        ? permissions.filter((p: any) => ALL_PERMISSIONS.includes(p))
+        : undefined;
+
+      const updated = updateOtherAdmin(id, {
+        username: username !== undefined ? username.trim() : undefined,
+        password: password && password.trim() ? password : undefined,
+        permissions: validPerms,
+        isActive: typeof isActive === 'boolean' ? isActive : undefined,
+      });
+
+      res.json(updated);
+    } catch (err: any) {
+      console.error('Error updating other admin:', err);
+      res.status(400).json({ error: err.message || 'Failed to update administrator' });
+    }
+  });
+
+  // Toggle Other Admin active status (Enable / Disable)
+  app.patch('/api/admin/other-admins/:id/status', requireAdminAuth, requireMainAdmin, (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const { isActive } = req.body || {};
+      const updated = toggleOtherAdminStatus(id, typeof isActive === 'boolean' ? isActive : undefined);
+      res.json(updated);
+    } catch (err: any) {
+      console.error('Error toggling admin status:', err);
+      res.status(400).json({ error: err.message || 'Failed to update administrator status' });
+    }
+  });
+
+  // Delete an Other Admin
+  app.delete('/api/admin/other-admins/:id', requireAdminAuth, requireMainAdmin, (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const success = deleteOtherAdmin(id);
+      if (!success) {
+        return res.status(404).json({ error: 'Administrator not found' });
+      }
+      res.json({ success: true, message: 'Other Administrator deleted successfully' });
+    } catch (err: any) {
+      console.error('Error deleting other admin:', err);
+      res.status(500).json({ error: 'Failed to delete administrator' });
+    }
+  });
+
+  // ==========================================
+  // PROTECTED ADMIN ROUTES (PERMISSION GUARDED)
   // ==========================================
 
   // Admin Stats
-  app.get('/api/admin/stats', requireAdminAuth, (req, res) => {
+  app.get('/api/admin/stats', requireAdminAuth, requirePermission('VIEW_DASHBOARD'), (req, res) => {
     try {
       const stats = getAdminStats();
       res.json(stats);
@@ -365,14 +645,24 @@ async function startServer() {
   }
 
   // Create WebApp (supports both /api/admin/webapps and /api/webapps with auth)
-  const handleCreateWebApp = (req: Request, res: Response) => {
+  const handleCreateWebApp = (req: AuthRequest, res: Response) => {
     try {
+      if (req.user?.role !== 'MAIN_ADMIN' && !req.user?.permissions?.includes('ADD_WEBAPP')) {
+        return res.status(403).json({ error: 'Forbidden: Missing permission (ADD_WEBAPP)' });
+      }
+
       const validation = validateWebAppPayload(req.body);
       if (!validation.valid) {
         return res.status(400).json({ error: validation.message });
       }
 
       const { name, icon, servers } = req.body;
+      if (Array.isArray(servers) && servers.length > 0) {
+        if (req.user?.role !== 'MAIN_ADMIN' && !req.user?.permissions?.includes('ADD_SERVER')) {
+          return res.status(403).json({ error: 'Forbidden: Missing permission (ADD_SERVER) to add servers' });
+        }
+      }
+
       const cleanServers = servers.map((s: any) => ({
         url: s.url.trim(),
         category: s.category,
@@ -387,12 +677,16 @@ async function startServer() {
     }
   };
 
-  app.post('/api/admin/webapps', requireAdminAuth, handleCreateWebApp);
-  app.post('/api/webapps', requireAdminAuth, handleCreateWebApp);
+  app.post('/api/admin/webapps', requireAdminAuth, requirePermission('ADD_WEBAPP'), handleCreateWebApp);
+  app.post('/api/webapps', requireAdminAuth, requirePermission('ADD_WEBAPP'), handleCreateWebApp);
 
   // Update WebApp (supports both /api/admin/webapps/:id and /api/webapps/:id with auth)
-  const handleUpdateWebApp = (req: Request, res: Response) => {
+  const handleUpdateWebApp = (req: AuthRequest, res: Response) => {
     try {
+      if (req.user?.role !== 'MAIN_ADMIN' && !req.user?.permissions?.includes('EDIT_WEBAPP')) {
+        return res.status(403).json({ error: 'Forbidden: Missing permission (EDIT_WEBAPP)' });
+      }
+
       const { id } = req.params;
       const existing = getAdminWebAppById(id);
       if (!existing) {
@@ -405,6 +699,39 @@ async function startServer() {
       }
 
       const { name, icon, servers } = req.body;
+
+      // Check granular server permissions for Other Admin
+      if (req.user?.role !== 'MAIN_ADMIN') {
+        const perms = req.user?.permissions || [];
+        const existingServerMap = new Map(existing.servers.map(s => [s.id, s]));
+        const payloadServerIds = new Set(servers.filter((s: any) => s.id).map((s: any) => s.id));
+
+        // 1. Check if new servers are added
+        const hasNewServers = servers.some((s: any) => !s.id || !existingServerMap.has(s.id));
+        if (hasNewServers && !perms.includes('ADD_SERVER')) {
+          return res.status(403).json({ error: 'Forbidden: Missing permission (ADD_SERVER) to add new servers' });
+        }
+
+        // 2. Check if existing servers are removed
+        const hasDeletedServers = existing.servers.some(s => !payloadServerIds.has(s.id));
+        if (hasDeletedServers && !perms.includes('DELETE_SERVER')) {
+          return res.status(403).json({ error: 'Forbidden: Missing permission (DELETE_SERVER) to delete servers' });
+        }
+
+        // 3. Check for modified existing servers
+        for (const s of servers) {
+          if (s.id && existingServerMap.has(s.id)) {
+            const oldS = existingServerMap.get(s.id)!;
+            if (oldS.category !== s.category && !perms.includes('CHANGE_SERVER_CATEGORY')) {
+              return res.status(403).json({ error: 'Forbidden: Missing permission (CHANGE_SERVER_CATEGORY) to change server category' });
+            }
+            if (oldS.url !== s.url.trim() && !perms.includes('EDIT_SERVER')) {
+              return res.status(403).json({ error: 'Forbidden: Missing permission (EDIT_SERVER) to edit server URL' });
+            }
+          }
+        }
+      }
+
       const cleanServers = servers.map((s: any) => ({
         id: s.id,
         url: s.url.trim(),
@@ -420,12 +747,16 @@ async function startServer() {
     }
   };
 
-  app.put('/api/admin/webapps/:id', requireAdminAuth, handleUpdateWebApp);
-  app.put('/api/webapps/:id', requireAdminAuth, handleUpdateWebApp);
+  app.put('/api/admin/webapps/:id', requireAdminAuth, requirePermission('EDIT_WEBAPP'), handleUpdateWebApp);
+  app.put('/api/webapps/:id', requireAdminAuth, requirePermission('EDIT_WEBAPP'), handleUpdateWebApp);
 
   // Toggle server isActive status independently
-  const handleToggleServer = (req: Request, res: Response) => {
+  const handleToggleServer = (req: AuthRequest, res: Response) => {
     try {
+      if (req.user?.role !== 'MAIN_ADMIN' && !req.user?.permissions?.includes('EDIT_SERVER')) {
+        return res.status(403).json({ error: 'Forbidden: Missing permission (EDIT_SERVER)' });
+      }
+
       const { serverId } = req.params;
       const { isActive } = req.body || {};
       const result = toggleServerStatus(
@@ -442,12 +773,16 @@ async function startServer() {
     }
   };
 
-  app.patch('/api/admin/servers/:serverId/status', requireAdminAuth, handleToggleServer);
-  app.post('/api/admin/servers/:serverId/toggle', requireAdminAuth, handleToggleServer);
+  app.patch('/api/admin/servers/:serverId/status', requireAdminAuth, requirePermission('EDIT_SERVER'), handleToggleServer);
+  app.post('/api/admin/servers/:serverId/toggle', requireAdminAuth, requirePermission('EDIT_SERVER'), handleToggleServer);
 
   // Delete WebApp (supports both /api/admin/webapps/:id and /api/webapps/:id with auth)
-  const handleDeleteWebApp = (req: Request, res: Response) => {
+  const handleDeleteWebApp = (req: AuthRequest, res: Response) => {
     try {
+      if (req.user?.role !== 'MAIN_ADMIN' && !req.user?.permissions?.includes('DELETE_WEBAPP')) {
+        return res.status(403).json({ error: 'Forbidden: Missing permission (DELETE_WEBAPP)' });
+      }
+
       const { id } = req.params;
       const existing = getAdminWebAppById(id);
       if (!existing) {
@@ -462,8 +797,8 @@ async function startServer() {
     }
   };
 
-  app.delete('/api/admin/webapps/:id', requireAdminAuth, handleDeleteWebApp);
-  app.delete('/api/webapps/:id', requireAdminAuth, handleDeleteWebApp);
+  app.delete('/api/admin/webapps/:id', requireAdminAuth, requirePermission('DELETE_WEBAPP'), handleDeleteWebApp);
+  app.delete('/api/webapps/:id', requireAdminAuth, requirePermission('DELETE_WEBAPP'), handleDeleteWebApp);
 
   // Admin Site Settings routes
   app.get('/api/admin/settings', requireAdminAuth, (req, res) => {
@@ -476,8 +811,74 @@ async function startServer() {
     }
   });
 
-  app.put('/api/admin/settings', requireAdminAuth, (req, res) => {
+  app.put('/api/admin/settings', requireAdminAuth, (req: AuthRequest, res) => {
     try {
+      const user = req.user;
+      if (user?.role !== 'MAIN_ADMIN') {
+        const perms = user?.permissions || [];
+        const {
+          telegramUrl,
+          whatsappUrl,
+          aboutTitle,
+          aboutDescription,
+          happyTitle,
+          happyMessage,
+          happyIcon,
+          brandName,
+          brandTagline,
+          brandLogo,
+          aboutMessageTitle,
+          aboutMessageSubtitle,
+          developerName,
+          developerRole,
+          developerDescription,
+          developerPhoto,
+          developerTagline,
+          developerSocialLinks,
+          aboutFooterTitle,
+          aboutFooterSubtitle,
+          aboutFooterTagline,
+        } = req.body;
+
+        if (telegramUrl !== undefined && !perms.includes('EDIT_TELEGRAM')) {
+          return res.status(403).json({ error: 'Forbidden: Missing permission (EDIT_TELEGRAM)' });
+        }
+
+        if (whatsappUrl !== undefined && !perms.includes('EDIT_WHATSAPP')) {
+          return res.status(403).json({ error: 'Forbidden: Missing permission (EDIT_WHATSAPP)' });
+        }
+
+        const isEditingStayHappy = (
+          happyTitle !== undefined ||
+          happyMessage !== undefined ||
+          happyIcon !== undefined
+        );
+        if (isEditingStayHappy && !perms.includes('EDIT_STAY_HAPPY')) {
+          return res.status(403).json({ error: 'Forbidden: Missing permission (EDIT_STAY_HAPPY)' });
+        }
+
+        const isEditingAbout = (
+          aboutTitle !== undefined ||
+          aboutDescription !== undefined ||
+          brandName !== undefined ||
+          brandTagline !== undefined ||
+          brandLogo !== undefined ||
+          aboutMessageTitle !== undefined ||
+          aboutMessageSubtitle !== undefined ||
+          developerName !== undefined ||
+          developerRole !== undefined ||
+          developerDescription !== undefined ||
+          developerPhoto !== undefined ||
+          developerTagline !== undefined ||
+          developerSocialLinks !== undefined ||
+          aboutFooterTitle !== undefined ||
+          aboutFooterSubtitle !== undefined ||
+          aboutFooterTagline !== undefined
+        );
+        if (isEditingAbout && !perms.includes('EDIT_ABOUT_US')) {
+          return res.status(403).json({ error: 'Forbidden: Missing permission (EDIT_ABOUT_US)' });
+        }
+      }
       const {
         telegramUrl,
         whatsappUrl,
@@ -540,8 +941,16 @@ async function startServer() {
   });
 
   // Dedicated admin endpoint for updating Message / Notice
-  app.put('/api/admin/message', requireAdminAuth, (req, res) => {
+  app.put('/api/admin/message', requireAdminAuth, (req: AuthRequest, res) => {
     try {
+      if (req.user?.role !== 'MAIN_ADMIN') {
+        const perms = req.user?.permissions || [];
+        const hasPerm = perms.includes('EDIT_ABOUT_US') || perms.includes('EDIT_TELEGRAM') || perms.includes('EDIT_WHATSAPP');
+        if (!hasPerm) {
+          return res.status(403).json({ error: 'Forbidden: Missing permission to edit message/notice' });
+        }
+      }
+
       const { messageTitle, messageContent } = req.body;
       const updated = updateSiteSettings({
         messageTitle: messageTitle !== undefined ? String(messageTitle) : undefined,
@@ -572,7 +981,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/admin/team-members', requireAdminAuth, (req, res) => {
+  app.post('/api/admin/team-members', requireAdminAuth, requirePermission('EDIT_ABOUT_US'), (req, res) => {
     try {
       const { name, role, description, photo, sortOrder, socialLinks } = req.body;
       if (!name || typeof name !== 'string' || !name.trim()) {
@@ -597,7 +1006,7 @@ async function startServer() {
     }
   });
 
-  app.put('/api/admin/team-members/:id', requireAdminAuth, (req, res) => {
+  app.put('/api/admin/team-members/:id', requireAdminAuth, requirePermission('EDIT_ABOUT_US'), (req, res) => {
     try {
       const { id } = req.params;
       const { name, role, description, photo, sortOrder, socialLinks } = req.body;
@@ -627,7 +1036,7 @@ async function startServer() {
     }
   });
 
-  app.delete('/api/admin/team-members/:id', requireAdminAuth, (req, res) => {
+  app.delete('/api/admin/team-members/:id', requireAdminAuth, requirePermission('EDIT_ABOUT_US'), (req, res) => {
     try {
       const { id } = req.params;
       deleteTeamMember(id);
@@ -638,7 +1047,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/admin/team-members/reorder', requireAdminAuth, (req, res) => {
+  app.post('/api/admin/team-members/reorder', requireAdminAuth, requirePermission('EDIT_ABOUT_US'), (req, res) => {
     try {
       const { ids } = req.body;
       if (!Array.isArray(ids)) {
@@ -667,7 +1076,7 @@ async function startServer() {
     }
   });
 
-  app.put('/api/admin/achievements/message', requireAdminAuth, (req, res) => {
+  app.put('/api/admin/achievements/message', requireAdminAuth, requireAnyPermission(['VIEW_DASHBOARD', 'EDIT_ABOUT_US']), (req, res) => {
     try {
       const { title, content } = req.body;
       const updated = updateAchievementMessage(
@@ -704,7 +1113,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/admin/achievements', requireAdminAuth, (req, res) => {
+  app.post('/api/admin/achievements', requireAdminAuth, requireAnyPermission(['VIEW_DASHBOARD', 'EDIT_ABOUT_US']), (req, res) => {
     try {
       const { imageUrl, comment, isPinned } = req.body;
       if (!imageUrl || !isValidImageUrl(imageUrl)) {
@@ -722,7 +1131,7 @@ async function startServer() {
     }
   });
 
-  app.put('/api/admin/achievements/:id', requireAdminAuth, (req, res) => {
+  app.put('/api/admin/achievements/:id', requireAdminAuth, requireAnyPermission(['VIEW_DASHBOARD', 'EDIT_ABOUT_US']), (req, res) => {
     try {
       const { id } = req.params;
       const { imageUrl, comment, isPinned } = req.body;
@@ -750,7 +1159,7 @@ async function startServer() {
   });
 
   // Pin / Unpin achievement
-  const handleToggleAchievementPin = (req: Request, res: Response) => {
+  const handleToggleAchievementPin = (req: AuthRequest, res: Response) => {
     try {
       const { id } = req.params;
       const { isPinned } = req.body;
@@ -768,10 +1177,10 @@ async function startServer() {
     }
   };
 
-  app.patch('/api/admin/achievements/:id/pin', requireAdminAuth, handleToggleAchievementPin);
-  app.post('/api/admin/achievements/:id/pin', requireAdminAuth, handleToggleAchievementPin);
+  app.patch('/api/admin/achievements/:id/pin', requireAdminAuth, requireAnyPermission(['VIEW_DASHBOARD', 'EDIT_ABOUT_US']), handleToggleAchievementPin);
+  app.post('/api/admin/achievements/:id/pin', requireAdminAuth, requireAnyPermission(['VIEW_DASHBOARD', 'EDIT_ABOUT_US']), handleToggleAchievementPin);
 
-  app.delete('/api/admin/achievements/:id', requireAdminAuth, (req, res) => {
+  app.delete('/api/admin/achievements/:id', requireAdminAuth, requireAnyPermission(['VIEW_DASHBOARD', 'EDIT_ABOUT_US']), (req, res) => {
     try {
       const { id } = req.params;
       deleteAchievement(id);
@@ -783,7 +1192,7 @@ async function startServer() {
   });
 
   // Server management endpoints
-  app.post('/api/webapps/:id/servers', requireAdminAuth, (req, res) => {
+  app.post('/api/webapps/:id/servers', requireAdminAuth, requirePermission('ADD_SERVER'), (req, res) => {
     try {
       const { id } = req.params;
       const appItem = getAdminWebAppById(id);
