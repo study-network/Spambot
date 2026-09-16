@@ -9,6 +9,7 @@ import {
   TeamMember,
   OtherAdminUser,
   AdminPermission,
+  NoticeMessage,
 } from '../types.ts';
 
 const TOKEN_KEY = 'web_app_admin_token';
@@ -386,10 +387,16 @@ export async function updateTeamMember(id: string, payload: {
 }
 
 export async function deleteTeamMember(id: string): Promise<void> {
-  const res = await fetch(`/api/admin/team-members/${encodeURIComponent(id)}`, {
+  let res = await fetch(`/api/admin/team-members/${encodeURIComponent(id)}`, {
     method: 'DELETE',
     headers: getHeaders(true),
   });
+  if (!res.ok && res.status === 404) {
+    res = await fetch(`/api/team-members/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: getHeaders(true),
+    });
+  }
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     throw new Error(data.error || 'Failed to delete team member');
@@ -407,6 +414,104 @@ export async function reorderTeamMembers(ids: string[]): Promise<TeamMember[]> {
     throw new Error(data.error || 'Failed to reorder team members');
   }
   return data.members;
+}
+
+// ==========================================
+// MESSAGE / NOTICE API METHODS
+// ==========================================
+
+export async function fetchPublicMessages(): Promise<NoticeMessage[]> {
+  const res = await fetch('/api/messages');
+  if (!res.ok) {
+    throw new Error('Failed to fetch notices/messages');
+  }
+  return res.json();
+}
+
+export async function fetchAdminMessages(): Promise<NoticeMessage[]> {
+  const res = await fetch('/api/admin/messages', {
+    headers: getHeaders(true),
+  });
+  if (!res.ok) {
+    throw new Error('Failed to fetch admin notices/messages');
+  }
+  return res.json();
+}
+
+export async function createMessage(payload: {
+  title: string;
+  content: string;
+  isPublished?: boolean;
+  linkUrl?: string;
+  linkLabel?: string;
+}): Promise<NoticeMessage> {
+  const res = await fetch('/api/admin/messages', {
+    method: 'POST',
+    headers: getHeaders(true),
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || 'Failed to create notice/message');
+  }
+  return data;
+}
+
+export async function updateMessage(id: string, payload: {
+  title?: string;
+  content?: string;
+  isPublished?: boolean;
+  linkUrl?: string;
+  linkLabel?: string;
+  sortOrder?: number;
+}): Promise<NoticeMessage> {
+  const res = await fetch(`/api/admin/messages/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: getHeaders(true),
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || 'Failed to update notice/message');
+  }
+  return data;
+}
+
+export async function deleteMessage(id: string): Promise<void> {
+  const res = await fetch(`/api/admin/messages/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: getHeaders(true),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Failed to delete notice/message');
+  }
+}
+
+export async function publishMessage(id: string, isPublished: boolean): Promise<NoticeMessage> {
+  const res = await fetch(`/api/admin/messages/${encodeURIComponent(id)}/publish`, {
+    method: 'PUT',
+    headers: getHeaders(true),
+    body: JSON.stringify({ isPublished }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || 'Failed to update notice publication status');
+  }
+  return data;
+}
+
+export async function reorderMessages(ids: string[]): Promise<NoticeMessage[]> {
+  const res = await fetch('/api/admin/messages/reorder', {
+    method: 'POST',
+    headers: getHeaders(true),
+    body: JSON.stringify({ ids }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || 'Failed to reorder notices/messages');
+  }
+  return data.messages;
 }
 
 // Other Admins Management API (MAIN ADMIN only)

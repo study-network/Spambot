@@ -10,6 +10,7 @@ interface ConfirmDialogProps {
   cancelText?: string;
   isDestructive?: boolean;
   isLoading?: boolean;
+  error?: string | null;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -22,6 +23,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   cancelText = 'Cancel',
   isDestructive = true,
   isLoading = false,
+  error,
   onConfirm,
   onCancel,
 }) => {
@@ -97,6 +99,15 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
                 <X className="w-4 h-4" />
               </button>
             </div>
+
+            {error && (
+              <div
+                id="confirm-dialog-error"
+                className="mt-4 p-3 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900/60 text-xs text-rose-700 dark:text-rose-300 font-medium"
+              >
+                {error}
+              </div>
+            )}
 
             <div className="mt-6 flex items-center justify-end gap-3">
               <button

@@ -144,8 +144,21 @@ export async function initDatabase(): Promise<Database> {
       created_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS messages (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      is_published INTEGER NOT NULL DEFAULT 1,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      link_url TEXT NOT NULL DEFAULT '',
+      link_label TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
     CREATE UNIQUE INDEX IF NOT EXISTS idx_admin_perm ON admin_permissions(admin_id, permission);
     CREATE INDEX IF NOT EXISTS idx_other_admins_user ON other_admins(username);
+    CREATE INDEX IF NOT EXISTS idx_messages_sort ON messages(sort_order ASC, created_at DESC);
   `);
 
   // Migrate servers table if existing table lacks 'Some Error' category
@@ -316,6 +329,25 @@ export async function initDatabase(): Promise<Database> {
     }
   } catch (msgErr) {
     console.warn('[Database] achievement_message seed notice:', msgErr);
+  }
+
+  // Seed default notice message into messages table if empty
+  try {
+    const msgCount = db.exec(`SELECT count(*) FROM messages`);
+    if (msgCount.length > 0 && Number(msgCount[0].values[0][0]) === 0) {
+      const now = new Date().toISOString();
+      const defaultNotice = `📚 Stay consistent and keep learning every day.\n🚫 Do not misuse or share restricted links.\n💡 Use this platform only for educational purposes.\n❤️ Keep learning and stay motivated!`;
+      const mStmt = db.prepare(`
+        INSERT INTO messages (id, title, content, is_published, sort_order, link_url, link_label, created_at, updated_at)
+        VALUES (?, ?, ?, 1, 0, '', '', ?, ?)
+      `);
+      mStmt.run([crypto.randomUUID(), 'Important Message', defaultNotice, now, now]);
+      mStmt.free();
+      saveDb();
+      console.log('[Database] Seeded initial notice in messages table');
+    }
+  } catch (msgNoticeErr) {
+    console.warn('[Database] messages seed notice:', msgNoticeErr);
   }
 
   // Seed default admin accounts from environment variables (.env)
@@ -1463,6 +1495,21 @@ export function updateTeamMember(
 
 export function deleteTeamMember(id: string): boolean {
   const database = getDb();
+  const existing = getTeamMemberById(id);
+  if (!existing) return false;
+
+  // Safely clean up associated uploaded photo file if stored locally
+  if (existing.photo && existing.photo.startsWith('/uploads/')) {
+    try {
+      const localPath = path.join(process.cwd(), existing.photo);
+      if (fs.existsSync(localPath)) {
+        fs.unlinkSync(localPath);
+      }
+    } catch (e) {
+      console.warn('[Database] Could not remove team member photo file:', e);
+    }
+  }
+
   const stmt = database.prepare(`DELETE FROM team_members WHERE id = ?`);
   stmt.run([id]);
   stmt.free();
@@ -1476,6 +1523,208 @@ export function reorderTeamMembers(ids: string[]): boolean {
   database.run('BEGIN TRANSACTION;');
   try {
     const stmt = database.prepare(`UPDATE team_members SET sort_order = ?, updated_at = ? WHERE id = ?`);
+    ids.forEach((id, idx) => {
+      stmt.run([idx + 1, now, id]);
+    });
+    stmt.free();
+    database.run('COMMIT;');
+    saveDb();
+    return true;
+  } catch (err) {
+    database.run('ROLLBACK;');
+    throw err;
+  }
+}
+
+// ==========================================
+// MESSAGE / NOTICE REPOSITORY FUNCTIONS
+// ==========================================
+
+export interface NoticeMessageRecord {
+  id: string;
+  title: string;
+  content: string;
+  isPublished: boolean;
+  sortOrder: number;
+  linkUrl: string;
+  linkLabel: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function getMessages(): NoticeMessageRecord[] {
+  const database = getDb();
+  const res = database.exec(`
+    SELECT id, title, content, is_published, sort_order, link_url, link_label, created_at, updated_at
+    FROM messages
+    ORDER BY sort_order ASC, created_at DESC
+  `);
+  if (res.length === 0) return [];
+  return res[0].values.map(row => ({
+    id: String(row[0]),
+    title: String(row[1]),
+    content: String(row[2]),
+    isPublished: Number(row[3]) === 1,
+    sortOrder: Number(row[4] || 0),
+    linkUrl: String(row[5] || ''),
+    linkLabel: String(row[6] || ''),
+    createdAt: String(row[7]),
+    updatedAt: String(row[8]),
+  }));
+}
+
+export function getPublishedMessages(): NoticeMessageRecord[] {
+  const database = getDb();
+  const res = database.exec(`
+    SELECT id, title, content, is_published, sort_order, link_url, link_label, created_at, updated_at
+    FROM messages
+    WHERE is_published = 1
+    ORDER BY sort_order ASC, created_at DESC
+  `);
+  if (res.length === 0) return [];
+  return res[0].values.map(row => ({
+    id: String(row[0]),
+    title: String(row[1]),
+    content: String(row[2]),
+    isPublished: true,
+    sortOrder: Number(row[4] || 0),
+    linkUrl: String(row[5] || ''),
+    linkLabel: String(row[6] || ''),
+    createdAt: String(row[7]),
+    updatedAt: String(row[8]),
+  }));
+}
+
+export function getMessageById(id: string): NoticeMessageRecord | null {
+  const database = getDb();
+  const stmt = database.prepare(`
+    SELECT id, title, content, is_published, sort_order, link_url, link_label, created_at, updated_at
+    FROM messages
+    WHERE id = ? LIMIT 1
+  `);
+  stmt.bind([id]);
+  if (!stmt.step()) {
+    stmt.free();
+    return null;
+  }
+  const row = stmt.get();
+  stmt.free();
+  return {
+    id: String(row[0]),
+    title: String(row[1]),
+    content: String(row[2]),
+    isPublished: Number(row[3]) === 1,
+    sortOrder: Number(row[4] || 0),
+    linkUrl: String(row[5] || ''),
+    linkLabel: String(row[6] || ''),
+    createdAt: String(row[7]),
+    updatedAt: String(row[8]),
+  };
+}
+
+export function createMessage(payload: {
+  title: string;
+  content: string;
+  isPublished?: boolean;
+  linkUrl?: string;
+  linkLabel?: string;
+}): NoticeMessageRecord {
+  const database = getDb();
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  const isPublished = payload.isPublished !== false ? 1 : 0;
+  const linkUrl = (payload.linkUrl || '').trim();
+  const linkLabel = (payload.linkLabel || '').trim();
+
+  const sortRes = database.exec(`SELECT MAX(sort_order) FROM messages`);
+  const maxSort = (sortRes.length > 0 && sortRes[0].values[0][0] !== null) ? Number(sortRes[0].values[0][0]) : 0;
+  const sortOrder = maxSort + 1;
+
+  const stmt = database.prepare(`
+    INSERT INTO messages (id, title, content, is_published, sort_order, link_url, link_label, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  stmt.run([id, payload.title.trim(), payload.content, isPublished, sortOrder, linkUrl, linkLabel, now, now]);
+  stmt.free();
+  saveDb();
+
+  return {
+    id,
+    title: payload.title.trim(),
+    content: payload.content,
+    isPublished: isPublished === 1,
+    sortOrder,
+    linkUrl,
+    linkLabel,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+export function updateMessage(id: string, payload: {
+  title?: string;
+  content?: string;
+  isPublished?: boolean;
+  linkUrl?: string;
+  linkLabel?: string;
+  sortOrder?: number;
+}): NoticeMessageRecord | null {
+  const database = getDb();
+  const existing = getMessageById(id);
+  if (!existing) return null;
+
+  const now = new Date().toISOString();
+  const title = payload.title !== undefined ? payload.title.trim() : existing.title;
+  const content = payload.content !== undefined ? payload.content : existing.content;
+  const isPublished = payload.isPublished !== undefined ? (payload.isPublished ? 1 : 0) : (existing.isPublished ? 1 : 0);
+  const linkUrl = payload.linkUrl !== undefined ? payload.linkUrl.trim() : existing.linkUrl;
+  const linkLabel = payload.linkLabel !== undefined ? payload.linkLabel.trim() : existing.linkLabel;
+  const sortOrder = payload.sortOrder !== undefined ? payload.sortOrder : existing.sortOrder;
+
+  const stmt = database.prepare(`
+    UPDATE messages
+    SET title = ?, content = ?, is_published = ?, sort_order = ?, link_url = ?, link_label = ?, updated_at = ?
+    WHERE id = ?
+  `);
+  stmt.run([title, content, isPublished, sortOrder, linkUrl, linkLabel, now, id]);
+  stmt.free();
+  saveDb();
+
+  return {
+    id,
+    title,
+    content,
+    isPublished: isPublished === 1,
+    sortOrder,
+    linkUrl,
+    linkLabel,
+    createdAt: existing.createdAt,
+    updatedAt: now,
+  };
+}
+
+export function deleteMessage(id: string): boolean {
+  const database = getDb();
+  const existing = getMessageById(id);
+  if (!existing) return false;
+
+  const stmt = database.prepare(`DELETE FROM messages WHERE id = ?`);
+  stmt.run([id]);
+  stmt.free();
+  saveDb();
+  return true;
+}
+
+export function publishMessage(id: string, isPublished: boolean): NoticeMessageRecord | null {
+  return updateMessage(id, { isPublished });
+}
+
+export function reorderMessages(ids: string[]): boolean {
+  const database = getDb();
+  const now = new Date().toISOString();
+  database.run('BEGIN TRANSACTION;');
+  try {
+    const stmt = database.prepare(`UPDATE messages SET sort_order = ?, updated_at = ? WHERE id = ?`);
     ids.forEach((id, idx) => {
       stmt.run([idx + 1, now, id]);
     });

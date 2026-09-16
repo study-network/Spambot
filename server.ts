@@ -35,6 +35,14 @@ import {
   updateTeamMember,
   deleteTeamMember,
   reorderTeamMembers,
+  getMessages,
+  getPublishedMessages,
+  getMessageById,
+  createMessage,
+  updateMessage,
+  deleteMessage,
+  publishMessage,
+  reorderMessages,
   getAllOtherAdmins,
   getOtherAdminById,
   getOtherAdminByUsername,
@@ -50,31 +58,69 @@ const JWT_SECRET = process.env.JWT_SECRET || 'secret-admin-token-link-manager-ke
 export type AdminRole = 'MAIN_ADMIN' | 'OTHER_ADMIN';
 
 export type AdminPermission =
+  // Web Apps
+  | 'VIEW_WEBAPPS'
   | 'ADD_WEBAPP'
   | 'EDIT_WEBAPP'
   | 'DELETE_WEBAPP'
+  // Servers
+  | 'VIEW_SERVERS'
   | 'ADD_SERVER'
   | 'EDIT_SERVER'
   | 'DELETE_SERVER'
   | 'CHANGE_SERVER_CATEGORY'
+  // Site Settings
   | 'EDIT_TELEGRAM'
   | 'EDIT_WHATSAPP'
-  | 'EDIT_ABOUT_US'
   | 'EDIT_STAY_HAPPY'
+  // About Us & Team (Granular)
+  | 'VIEW_ABOUT_US_TEAM'
+  | 'EDIT_ABOUT_US'
+  | 'EDIT_DEVELOPER'
+  | 'ADD_TEAM_MEMBER'
+  | 'EDIT_TEAM_MEMBER'
+  | 'DELETE_TEAM_MEMBER'
+  | 'MANAGE_TEAM_SOCIAL_LINKS'
+  | 'REORDER_TEAM_MEMBERS'
+  // Message / Notice (Granular)
+  | 'VIEW_MESSAGES'
+  | 'ADD_MESSAGE'
+  | 'EDIT_MESSAGE'
+  | 'DELETE_MESSAGE'
+  | 'PUBLISH_MESSAGE'
+  | 'REORDER_MESSAGES'
+  | 'MANAGE_MESSAGE_LINKS'
+  // Dashboard
   | 'VIEW_DASHBOARD';
 
 export const ALL_PERMISSIONS: AdminPermission[] = [
+  'VIEW_WEBAPPS',
   'ADD_WEBAPP',
   'EDIT_WEBAPP',
   'DELETE_WEBAPP',
+  'VIEW_SERVERS',
   'ADD_SERVER',
   'EDIT_SERVER',
   'DELETE_SERVER',
   'CHANGE_SERVER_CATEGORY',
   'EDIT_TELEGRAM',
   'EDIT_WHATSAPP',
-  'EDIT_ABOUT_US',
   'EDIT_STAY_HAPPY',
+  'VIEW_ABOUT_US_TEAM',
+  'EDIT_ABOUT_US',
+  'EDIT_DEVELOPER',
+  'ADD_TEAM_MEMBER',
+  'EDIT_TEAM_MEMBER',
+  'DELETE_TEAM_MEMBER',
+  'MANAGE_TEAM_SOCIAL_LINKS',
+  'REORDER_TEAM_MEMBERS',
+  'VIEW_MESSAGES',
+  'ADD_MESSAGE',
+  'EDIT_MESSAGE',
+  'DELETE_MESSAGE',
+  'PUBLISH_MESSAGE',
+  'REORDER_MESSAGES',
+  'MANAGE_MESSAGE_LINKS',
   'VIEW_DASHBOARD',
 ];
 
@@ -824,11 +870,14 @@ async function startServer() {
           happyTitle,
           happyMessage,
           happyIcon,
+          messageTitle,
+          messageContent,
           brandName,
           brandTagline,
           brandLogo,
           aboutMessageTitle,
           aboutMessageSubtitle,
+          aboutMessageIcon,
           developerName,
           developerRole,
           developerDescription,
@@ -865,18 +914,33 @@ async function startServer() {
           brandLogo !== undefined ||
           aboutMessageTitle !== undefined ||
           aboutMessageSubtitle !== undefined ||
-          developerName !== undefined ||
-          developerRole !== undefined ||
-          developerDescription !== undefined ||
-          developerPhoto !== undefined ||
-          developerTagline !== undefined ||
-          developerSocialLinks !== undefined ||
+          aboutMessageIcon !== undefined ||
           aboutFooterTitle !== undefined ||
           aboutFooterSubtitle !== undefined ||
           aboutFooterTagline !== undefined
         );
         if (isEditingAbout && !perms.includes('EDIT_ABOUT_US')) {
           return res.status(403).json({ error: 'Forbidden: Missing permission (EDIT_ABOUT_US)' });
+        }
+
+        const isEditingDeveloper = (
+          developerName !== undefined ||
+          developerRole !== undefined ||
+          developerDescription !== undefined ||
+          developerPhoto !== undefined ||
+          developerTagline !== undefined ||
+          developerSocialLinks !== undefined
+        );
+        if (isEditingDeveloper && !perms.includes('EDIT_DEVELOPER')) {
+          return res.status(403).json({ error: 'Forbidden: Missing permission (EDIT_DEVELOPER)' });
+        }
+
+        const isEditingMessage = (
+          messageTitle !== undefined ||
+          messageContent !== undefined
+        );
+        if (isEditingMessage && !perms.includes('EDIT_MESSAGE')) {
+          return res.status(403).json({ error: 'Forbidden: Missing permission (EDIT_MESSAGE)' });
         }
       }
       const {
@@ -940,17 +1004,76 @@ async function startServer() {
     }
   });
 
-  // Dedicated admin endpoint for updating Message / Notice
-  app.put('/api/admin/message', requireAdminAuth, (req: AuthRequest, res) => {
+  // Dedicated About Us endpoint (supports both /api/admin/about-us and /api/about-us)
+  const handleUpdateAboutUs = (req: AuthRequest, res: Response) => {
     try {
-      if (req.user?.role !== 'MAIN_ADMIN') {
-        const perms = req.user?.permissions || [];
-        const hasPerm = perms.includes('EDIT_ABOUT_US') || perms.includes('EDIT_TELEGRAM') || perms.includes('EDIT_WHATSAPP');
-        if (!hasPerm) {
-          return res.status(403).json({ error: 'Forbidden: Missing permission to edit message/notice' });
+      const user = req.user;
+      if (user?.role !== 'MAIN_ADMIN') {
+        const perms = user?.permissions || [];
+        const {
+          developerName,
+          developerRole,
+          developerDescription,
+          developerPhoto,
+          developerTagline,
+          developerSocialLinks,
+          aboutTitle,
+          aboutDescription,
+          brandName,
+          brandTagline,
+          brandLogo,
+          aboutMessageTitle,
+          aboutMessageSubtitle,
+          aboutMessageIcon,
+          aboutFooterTitle,
+          aboutFooterSubtitle,
+          aboutFooterTagline,
+        } = req.body;
+
+        const isDev = (
+          developerName !== undefined ||
+          developerRole !== undefined ||
+          developerDescription !== undefined ||
+          developerPhoto !== undefined ||
+          developerTagline !== undefined ||
+          developerSocialLinks !== undefined
+        );
+        if (isDev && !perms.includes('EDIT_DEVELOPER')) {
+          return res.status(403).json({ error: 'Forbidden: Missing permission (EDIT_DEVELOPER)' });
+        }
+
+        const isAbout = (
+          aboutTitle !== undefined ||
+          aboutDescription !== undefined ||
+          brandName !== undefined ||
+          brandTagline !== undefined ||
+          brandLogo !== undefined ||
+          aboutMessageTitle !== undefined ||
+          aboutMessageSubtitle !== undefined ||
+          aboutMessageIcon !== undefined ||
+          aboutFooterTitle !== undefined ||
+          aboutFooterSubtitle !== undefined ||
+          aboutFooterTagline !== undefined
+        );
+        if (isAbout && !perms.includes('EDIT_ABOUT_US')) {
+          return res.status(403).json({ error: 'Forbidden: Missing permission (EDIT_ABOUT_US)' });
         }
       }
 
+      const updated = updateSiteSettings(req.body);
+      res.json(updated);
+    } catch (err: any) {
+      console.error('Error updating about us:', err);
+      res.status(400).json({ error: err.message || 'Failed to update about us' });
+    }
+  };
+
+  app.put('/api/admin/about-us', requireAdminAuth, requireAnyPermission(['EDIT_ABOUT_US', 'EDIT_DEVELOPER']), handleUpdateAboutUs);
+  app.put('/api/about-us', requireAdminAuth, requireAnyPermission(['EDIT_ABOUT_US', 'EDIT_DEVELOPER']), handleUpdateAboutUs);
+
+  // Dedicated admin endpoint for updating legacy Message / Notice
+  app.put('/api/admin/message', requireAdminAuth, requirePermission('EDIT_MESSAGE'), (req: AuthRequest, res) => {
+    try {
       const { messageTitle, messageContent } = req.body;
       const updated = updateSiteSettings({
         messageTitle: messageTitle !== undefined ? String(messageTitle) : undefined,
@@ -969,9 +1092,197 @@ async function startServer() {
   });
 
   // ==========================================
-  // ADMIN TEAM MEMBERS ROUTES
+  // MESSAGE / NOTICE GRANULAR ROUTES
   // ==========================================
-  app.get('/api/admin/team-members', requireAdminAuth, (req, res) => {
+
+  // Public messages list
+  app.get('/api/messages', (req, res) => {
+    try {
+      const messages = getPublishedMessages();
+      res.json(messages);
+    } catch (err: any) {
+      console.error('Error fetching public messages:', err);
+      res.status(500).json({ error: 'Failed to retrieve messages' });
+    }
+  });
+
+  // Admin messages list (requires VIEW_MESSAGES)
+  app.get('/api/admin/messages', requireAdminAuth, requireAnyPermission(['VIEW_MESSAGES', 'ADD_MESSAGE', 'EDIT_MESSAGE', 'DELETE_MESSAGE', 'PUBLISH_MESSAGE', 'REORDER_MESSAGES', 'MANAGE_MESSAGE_LINKS']), (req, res) => {
+    try {
+      const messages = getMessages();
+      res.json(messages);
+    } catch (err: any) {
+      console.error('Error fetching admin messages:', err);
+      res.status(500).json({ error: 'Failed to retrieve messages' });
+    }
+  });
+
+  // Create Message (requires ADD_MESSAGE)
+  const handleCreateMessage = (req: AuthRequest, res: Response) => {
+    try {
+      const { title, content, isPublished, linkUrl, linkLabel } = req.body;
+      if (!title || typeof title !== 'string' || !title.trim()) {
+        return res.status(400).json({ error: 'Message title is required' });
+      }
+      if (!content || typeof content !== 'string' || !content.trim()) {
+        return res.status(400).json({ error: 'Message content is required' });
+      }
+
+      // Check link permission if link provided
+      if (req.user?.role !== 'MAIN_ADMIN' && (linkUrl || linkLabel)) {
+        if (!req.user?.permissions?.includes('MANAGE_MESSAGE_LINKS')) {
+          return res.status(403).json({ error: 'Forbidden: Missing permission (MANAGE_MESSAGE_LINKS)' });
+        }
+      }
+
+      const created = createMessage({
+        title: title.trim(),
+        content: content.trim(),
+        isPublished: typeof isPublished === 'boolean' ? isPublished : true,
+        linkUrl: linkUrl ? String(linkUrl).trim() : '',
+        linkLabel: linkLabel ? String(linkLabel).trim() : '',
+      });
+
+      // Keep site settings in sync if published
+      if (created.isPublished) {
+        updateSiteSettings({
+          messageTitle: created.title,
+          messageContent: created.content,
+        });
+      }
+
+      res.status(201).json(created);
+    } catch (err: any) {
+      console.error('Error creating message:', err);
+      res.status(400).json({ error: err.message || 'Failed to create message' });
+    }
+  };
+
+  app.post('/api/admin/messages', requireAdminAuth, requirePermission('ADD_MESSAGE'), handleCreateMessage);
+  app.post('/api/messages', requireAdminAuth, requirePermission('ADD_MESSAGE'), handleCreateMessage);
+
+  // Update Message (requires EDIT_MESSAGE)
+  const handleUpdateMessage = (req: AuthRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { title, content, isPublished, linkUrl, linkLabel, sortOrder } = req.body;
+
+      if (title !== undefined && (!title || !String(title).trim())) {
+        return res.status(400).json({ error: 'Message title cannot be empty' });
+      }
+      if (content !== undefined && (!content || !String(content).trim())) {
+        return res.status(400).json({ error: 'Message content cannot be empty' });
+      }
+
+      // Check link permission if links touched
+      if (req.user?.role !== 'MAIN_ADMIN' && (linkUrl !== undefined || linkLabel !== undefined)) {
+        if (!req.user?.permissions?.includes('MANAGE_MESSAGE_LINKS')) {
+          return res.status(403).json({ error: 'Forbidden: Missing permission (MANAGE_MESSAGE_LINKS)' });
+        }
+      }
+
+      const updated = updateMessage(id, {
+        title: title !== undefined ? String(title).trim() : undefined,
+        content: content !== undefined ? String(content).trim() : undefined,
+        isPublished: typeof isPublished === 'boolean' ? isPublished : undefined,
+        linkUrl: linkUrl !== undefined ? String(linkUrl).trim() : undefined,
+        linkLabel: linkLabel !== undefined ? String(linkLabel).trim() : undefined,
+        sortOrder: typeof sortOrder === 'number' ? sortOrder : undefined,
+      });
+
+      if (!updated) {
+        return res.status(404).json({ error: 'Message not found' });
+      }
+
+      // Keep site settings in sync if published
+      if (updated.isPublished) {
+        updateSiteSettings({
+          messageTitle: updated.title,
+          messageContent: updated.content,
+        });
+      }
+
+      res.json(updated);
+    } catch (err: any) {
+      console.error('Error updating message:', err);
+      res.status(400).json({ error: err.message || 'Failed to update message' });
+    }
+  };
+
+  app.put('/api/admin/messages/:id', requireAdminAuth, requirePermission('EDIT_MESSAGE'), handleUpdateMessage);
+  app.put('/api/messages/:id', requireAdminAuth, requirePermission('EDIT_MESSAGE'), handleUpdateMessage);
+
+  // Publish / Unpublish Message (requires PUBLISH_MESSAGE)
+  const handlePublishMessage = (req: AuthRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { isPublished } = req.body;
+      if (typeof isPublished !== 'boolean') {
+        return res.status(400).json({ error: 'isPublished boolean is required' });
+      }
+
+      const updated = publishMessage(id, isPublished);
+      if (!updated) {
+        return res.status(404).json({ error: 'Message not found' });
+      }
+
+      if (updated.isPublished) {
+        updateSiteSettings({
+          messageTitle: updated.title,
+          messageContent: updated.content,
+        });
+      }
+
+      res.json(updated);
+    } catch (err: any) {
+      console.error('Error publishing message:', err);
+      res.status(500).json({ error: 'Failed to update message publication status' });
+    }
+  };
+
+  app.put('/api/admin/messages/:id/publish', requireAdminAuth, requirePermission('PUBLISH_MESSAGE'), handlePublishMessage);
+  app.put('/api/messages/:id/publish', requireAdminAuth, requirePermission('PUBLISH_MESSAGE'), handlePublishMessage);
+
+  // Delete Message (requires DELETE_MESSAGE)
+  const handleDeleteMessage = (req: AuthRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const success = deleteMessage(id);
+      if (!success) {
+        return res.status(404).json({ error: 'Message not found' });
+      }
+      res.json({ success: true, message: 'Message deleted successfully' });
+    } catch (err: any) {
+      console.error('Error deleting message:', err);
+      res.status(500).json({ error: 'Failed to delete message' });
+    }
+  };
+
+  app.delete('/api/admin/messages/:id', requireAdminAuth, requirePermission('DELETE_MESSAGE'), handleDeleteMessage);
+  app.delete('/api/messages/:id', requireAdminAuth, requirePermission('DELETE_MESSAGE'), handleDeleteMessage);
+
+  // Reorder Messages (requires REORDER_MESSAGES)
+  const handleReorderMessages = (req: AuthRequest, res: Response) => {
+    try {
+      const { ids } = req.body;
+      if (!Array.isArray(ids)) {
+        return res.status(400).json({ error: 'Invalid ids array for reordering' });
+      }
+      reorderMessages(ids);
+      res.json({ success: true, messages: getMessages() });
+    } catch (err: any) {
+      console.error('Error reordering messages:', err);
+      res.status(500).json({ error: 'Failed to reorder messages' });
+    }
+  };
+
+  app.post('/api/admin/messages/reorder', requireAdminAuth, requirePermission('REORDER_MESSAGES'), handleReorderMessages);
+  app.post('/api/messages/reorder', requireAdminAuth, requirePermission('REORDER_MESSAGES'), handleReorderMessages);
+
+  // ==========================================
+  // ADMIN TEAM MEMBERS ROUTES (GRANULAR)
+  // ==========================================
+  app.get('/api/admin/team-members', requireAdminAuth, requireAnyPermission(['VIEW_ABOUT_US_TEAM', 'EDIT_ABOUT_US', 'EDIT_DEVELOPER', 'ADD_TEAM_MEMBER', 'EDIT_TEAM_MEMBER', 'DELETE_TEAM_MEMBER', 'MANAGE_TEAM_SOCIAL_LINKS', 'REORDER_TEAM_MEMBERS']), (req, res) => {
     try {
       const members = getTeamMembers();
       res.json(members);
@@ -981,7 +1292,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/admin/team-members', requireAdminAuth, requirePermission('EDIT_ABOUT_US'), (req, res) => {
+  const handleCreateTeamMember = (req: AuthRequest, res: Response) => {
     try {
       const { name, role, description, photo, sortOrder, socialLinks } = req.body;
       if (!name || typeof name !== 'string' || !name.trim()) {
@@ -989,6 +1300,13 @@ async function startServer() {
       }
       if (!role || typeof role !== 'string' || !role.trim()) {
         return res.status(400).json({ error: 'Team member role / designation is required' });
+      }
+
+      // Check social links permission
+      if (req.user?.role !== 'MAIN_ADMIN' && Array.isArray(socialLinks) && socialLinks.length > 0) {
+        if (!req.user?.permissions?.includes('MANAGE_TEAM_SOCIAL_LINKS')) {
+          return res.status(403).json({ error: 'Forbidden: Missing permission (MANAGE_TEAM_SOCIAL_LINKS)' });
+        }
       }
 
       const created = createTeamMember({
@@ -1004,9 +1322,12 @@ async function startServer() {
       console.error('Error creating team member:', err);
       res.status(400).json({ error: err.message || 'Failed to create team member' });
     }
-  });
+  };
 
-  app.put('/api/admin/team-members/:id', requireAdminAuth, requirePermission('EDIT_ABOUT_US'), (req, res) => {
+  app.post('/api/admin/team-members', requireAdminAuth, requirePermission('ADD_TEAM_MEMBER'), handleCreateTeamMember);
+  app.post('/api/team-members', requireAdminAuth, requirePermission('ADD_TEAM_MEMBER'), handleCreateTeamMember);
+
+  const handleUpdateTeamMember = (req: AuthRequest, res: Response) => {
     try {
       const { id } = req.params;
       const { name, role, description, photo, sortOrder, socialLinks } = req.body;
@@ -1015,6 +1336,13 @@ async function startServer() {
       }
       if (role !== undefined && (!role || !String(role).trim())) {
         return res.status(400).json({ error: 'Team member role cannot be empty' });
+      }
+
+      // Check social links permission if modified
+      if (req.user?.role !== 'MAIN_ADMIN' && socialLinks !== undefined) {
+        if (!req.user?.permissions?.includes('MANAGE_TEAM_SOCIAL_LINKS')) {
+          return res.status(403).json({ error: 'Forbidden: Missing permission (MANAGE_TEAM_SOCIAL_LINKS)' });
+        }
       }
 
       const updated = updateTeamMember(id, {
@@ -1034,20 +1362,29 @@ async function startServer() {
       console.error('Error updating team member:', err);
       res.status(400).json({ error: err.message || 'Failed to update team member' });
     }
-  });
+  };
 
-  app.delete('/api/admin/team-members/:id', requireAdminAuth, requirePermission('EDIT_ABOUT_US'), (req, res) => {
+  app.put('/api/admin/team-members/:id', requireAdminAuth, requirePermission('EDIT_TEAM_MEMBER'), handleUpdateTeamMember);
+  app.put('/api/team-members/:id', requireAdminAuth, requirePermission('EDIT_TEAM_MEMBER'), handleUpdateTeamMember);
+
+  const handleDeleteTeamMember = (req: AuthRequest, res: Response) => {
     try {
       const { id } = req.params;
-      deleteTeamMember(id);
+      const success = deleteTeamMember(id);
+      if (!success) {
+        return res.status(404).json({ error: 'Team member not found' });
+      }
       res.json({ success: true, message: 'Team member deleted' });
     } catch (err: any) {
       console.error('Error deleting team member:', err);
       res.status(500).json({ error: 'Failed to delete team member' });
     }
-  });
+  };
 
-  app.post('/api/admin/team-members/reorder', requireAdminAuth, requirePermission('EDIT_ABOUT_US'), (req, res) => {
+  app.delete('/api/admin/team-members/:id', requireAdminAuth, requirePermission('DELETE_TEAM_MEMBER'), handleDeleteTeamMember);
+  app.delete('/api/team-members/:id', requireAdminAuth, requirePermission('DELETE_TEAM_MEMBER'), handleDeleteTeamMember);
+
+  const handleReorderTeamMembers = (req: AuthRequest, res: Response) => {
     try {
       const { ids } = req.body;
       if (!Array.isArray(ids)) {
@@ -1059,7 +1396,10 @@ async function startServer() {
       console.error('Error reordering team members:', err);
       res.status(500).json({ error: 'Failed to reorder team members' });
     }
-  });
+  };
+
+  app.post('/api/admin/team-members/reorder', requireAdminAuth, requirePermission('REORDER_TEAM_MEMBERS'), handleReorderTeamMembers);
+  app.post('/api/team-members/reorder', requireAdminAuth, requirePermission('REORDER_TEAM_MEMBERS'), handleReorderTeamMembers);
 
   // ==========================================
   // ADMIN ACHIEVEMENTS ROUTES

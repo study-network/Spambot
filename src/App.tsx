@@ -48,7 +48,6 @@ import {
   AppWindow, 
   Search, 
   Server, 
-  Sparkles,
   Menu
 } from 'lucide-react';
 
@@ -461,9 +460,6 @@ export default function App() {
                   <h1 id="public-header-title" className="font-bold text-base sm:text-lg text-neutral-900 dark:text-neutral-100 tracking-tight leading-none">
                     Study Network
                   </h1>
-                  <span className="text-[11px] text-neutral-500 dark:text-neutral-400 font-medium">
-                    Verified Multi-Server Launcher
-                  </span>
                 </div>
               </div>
 
@@ -486,12 +482,8 @@ export default function App() {
           {/* Public Hero / Announcement bar */}
           <div className="bg-gradient-to-b from-indigo-50/50 via-white to-transparent dark:from-indigo-950/20 dark:via-neutral-950 dark:to-transparent border-b border-neutral-100/80 dark:border-neutral-900 py-10 sm:py-14 px-4 sm:px-6 lg:px-8 text-center">
             <div className="max-w-2xl mx-auto">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 text-xs font-semibold mb-3 border border-indigo-200/60 dark:border-indigo-800/60">
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>Multi-Server Failover Directory</span>
-              </div>
               <h2 id="public-main-headline" className="text-2xl sm:text-4xl font-extrabold tracking-tight text-neutral-900 dark:text-neutral-100">
-                Launch Your Web Apps
+                WELCOME
               </h2>
               <p className="mt-2 text-sm sm:text-base text-neutral-500 dark:text-neutral-400 max-w-lg mx-auto">
                 Click any application card below to view active servers and connect instantly with real-time status indicators.
@@ -566,7 +558,7 @@ export default function App() {
           <footer className="mt-auto border-t border-neutral-200/60 dark:border-neutral-800/80 bg-white/50 dark:bg-neutral-950 py-6 text-center text-xs text-neutral-400 dark:text-neutral-500">
             <div className="max-w-7xl mx-auto px-4 flex items-center justify-center gap-2">
               <Server className="w-3.5 h-3.5 text-indigo-500" />
-              <span>Study Network &bull; Safe Multi-Server Architecture</span>
+              <span>Study Network</span>
             </div>
           </footer>
         </div>

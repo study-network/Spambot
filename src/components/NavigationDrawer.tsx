@@ -86,9 +86,6 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
                   <h2 id="drawer-title" className="font-bold text-lg text-neutral-900 dark:text-neutral-100 tracking-tight leading-snug">
                     Study Network
                   </h2>
-                  <p className="text-xs text-neutral-500 dark:text-neutral-400 font-medium">
-                    Verified Multi-Server Launcher
-                  </p>
                 </div>
 
                 <button

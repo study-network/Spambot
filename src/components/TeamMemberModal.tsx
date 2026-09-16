@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, User, Image as ImageIcon } from 'lucide-react';
+import { X, User, Image as ImageIcon, Trash2 } from 'lucide-react';
 import { TeamMember, SocialLink } from '../types.ts';
 import { SocialLinksEditor } from './SocialLinksEditor.tsx';
 
@@ -14,14 +14,20 @@ interface TeamMemberModalProps {
     photo: string;
     socialLinks: SocialLink[];
   }) => Promise<void>;
+  onDelete?: (member: TeamMember) => void;
   member?: TeamMember | null;
+  canManageSocialLinks?: boolean;
+  canDelete?: boolean;
 }
 
 export const TeamMemberModal: React.FC<TeamMemberModalProps> = ({
   isOpen,
   onClose,
   onSave,
+  onDelete,
   member,
+  canManageSocialLinks = true,
+  canDelete = true,
 }) => {
   const [name, setName] = useState('');
   const [role, setRole] = useState('');
@@ -206,32 +212,67 @@ export const TeamMemberModal: React.FC<TeamMemberModalProps> = ({
 
           {/* Social Links Editor */}
           <div className="pt-2 border-t border-slate-800/80">
-            <SocialLinksEditor
-              links={socialLinks}
-              onChange={setSocialLinks}
-              maxLinks={10}
-            />
+            {canManageSocialLinks ? (
+              <SocialLinksEditor
+                links={socialLinks}
+                onChange={setSocialLinks}
+                maxLinks={10}
+              />
+            ) : (
+              <div className="p-3 bg-slate-900/50 border border-slate-800 rounded-xl">
+                <p className="text-xs font-medium text-slate-400">
+                  <span className="text-amber-400 font-semibold">Note:</span> You do not have permission to manage team member social links.
+                </p>
+                {socialLinks.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {socialLinks.map((link, idx) => (
+                      <span key={idx} className="text-xs px-2.5 py-1 bg-slate-800 border border-slate-700/60 rounded-lg text-slate-300">
+                        {link.platform}: {link.url}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Footer Actions */}
-          <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-800">
-            <button
-              id="btn-cancel-team-modal"
-              type="button"
-              onClick={onClose}
-              disabled={loading}
-              className="px-4 py-2 text-xs font-semibold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-xl transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              id="btn-save-team-member"
-              type="submit"
-              disabled={loading}
-              className="px-5 py-2 text-xs font-semibold text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 rounded-xl transition-all shadow-md shadow-purple-900/30 disabled:opacity-50"
-            >
-              {loading ? 'Saving...' : member ? 'Update Member' : 'Save Member'}
-            </button>
+          <div className="flex items-center justify-between gap-2.5 pt-4 border-t border-slate-800">
+            <div>
+              {member && onDelete && canDelete && (
+                <button
+                  id="btn-delete-team-member-from-modal"
+                  type="button"
+                  disabled={loading}
+                  onClick={() => onDelete(member)}
+                  className="px-3 py-2 text-xs font-semibold text-rose-400 hover:text-rose-300 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/50 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  title="Delete this team member"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete Member</span>
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2.5">
+              <button
+                id="btn-cancel-team-modal"
+                type="button"
+                onClick={onClose}
+                disabled={loading}
+                className="px-4 py-2 text-xs font-semibold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-xl transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                id="btn-save-team-member"
+                type="submit"
+                disabled={loading}
+                className="px-5 py-2 text-xs font-semibold text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 rounded-xl transition-all shadow-md shadow-purple-900/30 disabled:opacity-50 cursor-pointer"
+              >
+                {loading ? 'Saving...' : member ? 'Update Member' : 'Save Member'}
+              </button>
+            </div>
           </div>
         </form>
       </div>

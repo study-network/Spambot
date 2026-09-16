@@ -18,7 +18,9 @@ import {
   Settings2,
   Layers,
   Globe,
-  Users
+  Users,
+  MessageSquare,
+  Megaphone,
 } from 'lucide-react';
 import { OtherAdminUser, AdminPermission } from '../types.ts';
 import { 
@@ -46,43 +48,71 @@ interface PermissionGroup {
 
 const PERMISSION_GROUPS: PermissionGroup[] = [
   {
-    name: 'Web Apps Management',
+    name: 'Web Apps',
     icon: Layers,
-    description: 'Control web app entries and directory items',
+    description: 'Control web app listings and directory entries',
     permissions: [
+      { key: 'VIEW_WEBAPPS', label: 'View Web Apps', description: 'View the list of web apps in admin' },
       { key: 'ADD_WEBAPP', label: 'Add Web App', description: 'Create new web app entries' },
       { key: 'EDIT_WEBAPP', label: 'Edit Web App', description: 'Modify web app details, icons, and names' },
       { key: 'DELETE_WEBAPP', label: 'Delete Web App', description: 'Remove web apps from directory' },
     ],
   },
   {
-    name: 'Server & Category Controls',
+    name: 'Servers',
     icon: Settings2,
     description: 'Control server links, status failovers, and categories',
     permissions: [
+      { key: 'VIEW_SERVERS', label: 'View Servers', description: 'View server entries and endpoints' },
       { key: 'ADD_SERVER', label: 'Add Server', description: 'Add new server links to web apps' },
-      { key: 'EDIT_SERVER', label: 'Edit Server', description: 'Update server URLs and categories' },
+      { key: 'EDIT_SERVER', label: 'Edit Server', description: 'Update server URLs and toggle active status' },
       { key: 'DELETE_SERVER', label: 'Delete Server', description: 'Remove servers from web apps' },
-      { key: 'TOGGLE_SERVER_STATUS', label: 'Toggle Server Status', description: 'Turn servers ON or OFF in real-time' },
-      { key: 'ADD_CATEGORY', label: 'Manage Categories', description: 'Assign categories (Working, Error, etc.)' },
+      { key: 'CHANGE_SERVER_CATEGORY', label: 'Change Server Category', description: 'Assign categories (Working, Error, etc.)' },
     ],
   },
   {
-    name: 'Site Settings & Social Links',
-    icon: Globe,
-    description: 'Control public announcements, social channels, and modals',
-    permissions: [
-      { key: 'EDIT_SITE_SETTINGS', label: 'Edit Site Settings', description: 'Update general settings and Notice Box' },
-      { key: 'EDIT_TELEGRAM_LINK', label: 'Edit Telegram Link', description: 'Update official Telegram channel URL' },
-      { key: 'EDIT_WHATSAPP_LINK', label: 'Edit WhatsApp Link', description: 'Update official WhatsApp community URL' },
-      { key: 'EDIT_STAY_HAPPY', label: 'Edit Stay Happy', description: 'Modify the Stay Happy card content and icon' },
-      { key: 'EDIT_ABOUT_US', label: 'Edit About Us & Team', description: 'Manage About Us info, team members, and achievements' },
-    ],
-  },
-  {
-    name: 'General Access',
+    name: 'About Us & Team',
     icon: Users,
-    description: 'System-level access and telemetry',
+    description: 'Control brand identity, developer profile, and team members',
+    permissions: [
+      { key: 'VIEW_ABOUT_US_TEAM', label: 'View About Us & Team', description: 'View the About Us & Team management tab' },
+      { key: 'EDIT_ABOUT_US', label: 'Edit About Us Details', description: 'Modify brand name, tagline, logo, quote, and footer banner' },
+      { key: 'EDIT_DEVELOPER', label: 'Edit Developer Section', description: 'Modify developer name, role, bio, photo, and developer social links' },
+      { key: 'ADD_TEAM_MEMBER', label: 'Add Team Member', description: 'Create new team members' },
+      { key: 'EDIT_TEAM_MEMBER', label: 'Edit Team Member', description: 'Modify team member details, role, and bio' },
+      { key: 'DELETE_TEAM_MEMBER', label: 'Delete Team Member', description: 'Permanently remove team members' },
+      { key: 'MANAGE_TEAM_SOCIAL_LINKS', label: 'Manage Team Member Social Links', description: 'Add, edit, or remove social media links for team members' },
+      { key: 'REORDER_TEAM_MEMBERS', label: 'Reorder Team Members', description: 'Change display order of team members' },
+    ],
+  },
+  {
+    name: 'Message / Notice',
+    icon: Megaphone,
+    description: 'Control public notices, alerts, announcements, and banners',
+    permissions: [
+      { key: 'VIEW_MESSAGES', label: 'View Message / Notice', description: 'View the notices and announcements management tab' },
+      { key: 'ADD_MESSAGE', label: 'Add Message / Notice', description: 'Create new messages and public notices' },
+      { key: 'EDIT_MESSAGE', label: 'Edit Message / Notice', description: 'Modify message titles and content' },
+      { key: 'DELETE_MESSAGE', label: 'Delete Message / Notice', description: 'Permanently remove notices/messages' },
+      { key: 'PUBLISH_MESSAGE', label: 'Publish / Unpublish Message', description: 'Toggle visibility of notices on the public site' },
+      { key: 'REORDER_MESSAGES', label: 'Reorder Messages', description: 'Change sequence and display order of notices' },
+      { key: 'MANAGE_MESSAGE_LINKS', label: 'Add / Edit Message Link', description: 'Attach custom buttons or link URLs to notices' },
+    ],
+  },
+  {
+    name: 'Site Settings',
+    icon: Globe,
+    description: 'Control global community channels and widgets',
+    permissions: [
+      { key: 'EDIT_TELEGRAM', label: 'Edit Telegram Link', description: 'Update official Telegram channel URL' },
+      { key: 'EDIT_WHATSAPP', label: 'Edit WhatsApp Link', description: 'Update official WhatsApp community URL' },
+      { key: 'EDIT_STAY_HAPPY', label: 'Edit Stay Happy', description: 'Modify the Stay Happy card content and icon' },
+    ],
+  },
+  {
+    name: 'Dashboard',
+    icon: Shield,
+    description: 'System overview and telemetry access',
     permissions: [
       { key: 'VIEW_DASHBOARD', label: 'View Dashboard Stats', description: 'View dashboard metrics, statistics, and counts' },
     ],
@@ -181,20 +211,50 @@ export const OtherAdminsAdminSection: React.FC<OtherAdminsAdminSectionProps> = (
     setFormData(prev => ({ ...prev, permissions: [] }));
   };
 
-  const handlePresetPermissions = (type: 'apps' | 'social') => {
+  const handlePresetPermissions = (type: 'apps' | 'about' | 'messages' | 'settings') => {
     if (type === 'apps') {
       setFormData(prev => ({
         ...prev,
         permissions: [
           'VIEW_DASHBOARD',
+          'VIEW_WEBAPPS',
           'ADD_WEBAPP',
           'EDIT_WEBAPP',
           'DELETE_WEBAPP',
+          'VIEW_SERVERS',
           'ADD_SERVER',
           'EDIT_SERVER',
           'DELETE_SERVER',
-          'TOGGLE_SERVER_STATUS',
-          'ADD_CATEGORY',
+          'CHANGE_SERVER_CATEGORY',
+        ],
+      }));
+    } else if (type === 'about') {
+      setFormData(prev => ({
+        ...prev,
+        permissions: [
+          'VIEW_DASHBOARD',
+          'VIEW_ABOUT_US_TEAM',
+          'EDIT_ABOUT_US',
+          'EDIT_DEVELOPER',
+          'ADD_TEAM_MEMBER',
+          'EDIT_TEAM_MEMBER',
+          'DELETE_TEAM_MEMBER',
+          'MANAGE_TEAM_SOCIAL_LINKS',
+          'REORDER_TEAM_MEMBERS',
+        ],
+      }));
+    } else if (type === 'messages') {
+      setFormData(prev => ({
+        ...prev,
+        permissions: [
+          'VIEW_DASHBOARD',
+          'VIEW_MESSAGES',
+          'ADD_MESSAGE',
+          'EDIT_MESSAGE',
+          'DELETE_MESSAGE',
+          'PUBLISH_MESSAGE',
+          'REORDER_MESSAGES',
+          'MANAGE_MESSAGE_LINKS',
         ],
       }));
     } else {
@@ -202,11 +262,9 @@ export const OtherAdminsAdminSection: React.FC<OtherAdminsAdminSectionProps> = (
         ...prev,
         permissions: [
           'VIEW_DASHBOARD',
-          'EDIT_SITE_SETTINGS',
-          'EDIT_TELEGRAM_LINK',
-          'EDIT_WHATSAPP_LINK',
+          'EDIT_TELEGRAM',
+          'EDIT_WHATSAPP',
           'EDIT_STAY_HAPPY',
-          'EDIT_ABOUT_US',
         ],
       }));
     }
@@ -676,10 +734,24 @@ export const OtherAdminsAdminSection: React.FC<OtherAdminsAdminSectionProps> = (
                       </button>
                       <button
                         type="button"
-                        onClick={() => handlePresetPermissions('social')}
+                        onClick={() => handlePresetPermissions('about')}
                         className="px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-200 transition-colors cursor-pointer"
                       >
-                        Settings & Notice
+                        About & Team
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handlePresetPermissions('messages')}
+                        className="px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-200 transition-colors cursor-pointer"
+                      >
+                        Message / Notice
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handlePresetPermissions('settings')}
+                        className="px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-200 transition-colors cursor-pointer"
+                      >
+                        Site Settings
                       </button>
                       <button
                         type="button"

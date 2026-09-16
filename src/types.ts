@@ -47,18 +47,52 @@ export interface DashboardStats {
 export type AdminRole = 'MAIN_ADMIN' | 'OTHER_ADMIN';
 
 export type AdminPermission =
+  // Web Apps
+  | 'VIEW_WEBAPPS'
   | 'ADD_WEBAPP'
   | 'EDIT_WEBAPP'
   | 'DELETE_WEBAPP'
+  // Servers
+  | 'VIEW_SERVERS'
   | 'ADD_SERVER'
   | 'EDIT_SERVER'
   | 'DELETE_SERVER'
   | 'CHANGE_SERVER_CATEGORY'
+  // Site Settings
   | 'EDIT_TELEGRAM'
   | 'EDIT_WHATSAPP'
-  | 'EDIT_ABOUT_US'
   | 'EDIT_STAY_HAPPY'
+  // About Us & Team (Granular)
+  | 'VIEW_ABOUT_US_TEAM'
+  | 'EDIT_ABOUT_US'
+  | 'EDIT_DEVELOPER'
+  | 'ADD_TEAM_MEMBER'
+  | 'EDIT_TEAM_MEMBER'
+  | 'DELETE_TEAM_MEMBER'
+  | 'MANAGE_TEAM_SOCIAL_LINKS'
+  | 'REORDER_TEAM_MEMBERS'
+  // Message / Notice (Granular)
+  | 'VIEW_MESSAGES'
+  | 'ADD_MESSAGE'
+  | 'EDIT_MESSAGE'
+  | 'DELETE_MESSAGE'
+  | 'PUBLISH_MESSAGE'
+  | 'REORDER_MESSAGES'
+  | 'MANAGE_MESSAGE_LINKS'
+  // Dashboard
   | 'VIEW_DASHBOARD';
+
+export interface NoticeMessage {
+  id: string;
+  title: string;
+  content: string;
+  isPublished: boolean;
+  sortOrder: number;
+  linkUrl?: string;
+  linkLabel?: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface OtherAdminUser {
   id: string;

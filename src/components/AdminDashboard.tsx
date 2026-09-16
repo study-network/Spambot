@@ -105,30 +105,48 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const canViewApps = hasAnyPermission([
     'VIEW_DASHBOARD',
+    'VIEW_WEBAPPS',
     'ADD_WEBAPP',
     'EDIT_WEBAPP',
     'DELETE_WEBAPP',
+    'VIEW_SERVERS',
     'ADD_SERVER',
     'EDIT_SERVER',
     'DELETE_SERVER',
-    'TOGGLE_SERVER_STATUS',
+    'CHANGE_SERVER_CATEGORY',
   ]);
-  const canViewAchievements = hasAnyPermission(['VIEW_DASHBOARD', 'EDIT_ABOUT_US']);
-  const canViewMessage = hasPermission('EDIT_SITE_SETTINGS');
-  const canViewAbout = hasPermission('EDIT_ABOUT_US');
+  const canViewAchievements = hasAnyPermission(['VIEW_DASHBOARD', 'EDIT_ABOUT_US', 'VIEW_ABOUT_US_TEAM']);
+  const canViewMessage = hasAnyPermission([
+    'VIEW_MESSAGES',
+    'ADD_MESSAGE',
+    'EDIT_MESSAGE',
+    'DELETE_MESSAGE',
+    'PUBLISH_MESSAGE',
+    'REORDER_MESSAGES',
+    'MANAGE_MESSAGE_LINKS',
+  ]);
+  const canViewAbout = hasAnyPermission([
+    'VIEW_ABOUT_US_TEAM',
+    'EDIT_ABOUT_US',
+    'EDIT_DEVELOPER',
+    'ADD_TEAM_MEMBER',
+    'EDIT_TEAM_MEMBER',
+    'DELETE_TEAM_MEMBER',
+    'MANAGE_TEAM_SOCIAL_LINKS',
+    'REORDER_TEAM_MEMBERS',
+  ]);
   const canViewSettings = hasAnyPermission([
-    'EDIT_SITE_SETTINGS',
-    'EDIT_TELEGRAM_LINK',
-    'EDIT_WHATSAPP_LINK',
+    'EDIT_TELEGRAM',
+    'EDIT_WHATSAPP',
     'EDIT_STAY_HAPPY',
   ]);
   const canViewAdmins = isMainAdmin;
 
   // Granular action permissions
   const canAddWebApp = hasPermission('ADD_WEBAPP');
-  const canEditWebApp = hasAnyPermission(['EDIT_WEBAPP', 'ADD_SERVER', 'EDIT_SERVER', 'DELETE_SERVER']);
+  const canEditWebApp = hasAnyPermission(['EDIT_WEBAPP', 'ADD_SERVER', 'EDIT_SERVER', 'DELETE_SERVER', 'CHANGE_SERVER_CATEGORY']);
   const canDeleteWebApp = hasPermission('DELETE_WEBAPP');
-  const canToggleServer = hasPermission('TOGGLE_SERVER_STATUS');
+  const canToggleServer = hasPermission('EDIT_SERVER');
 
   // If currently active tab is not allowed, auto-switch to first allowed tab
   useEffect(() => {
@@ -412,6 +430,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <MessageNoticeForm
             settings={settings}
             onSave={onSaveSettings}
+            userPermissions={userPermissions}
+            isMainAdmin={isMainAdmin}
           />
         )}
 
@@ -420,6 +440,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <AboutUsAdminSection
             settings={settings}
             onSaveSettings={onSaveSettings}
+            userPermissions={userPermissions}
+            isMainAdmin={isMainAdmin}
           />
         )}
 

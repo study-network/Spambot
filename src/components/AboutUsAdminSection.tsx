@@ -15,10 +15,11 @@ import {
   Globe,
   Image as ImageIcon
 } from 'lucide-react';
-import { SiteSettings, TeamMember, SocialLink } from '../types.ts';
+import { SiteSettings, TeamMember, SocialLink, AdminPermission } from '../types.ts';
 import { SocialLinksEditor } from './SocialLinksEditor.tsx';
 import { SocialIcon } from './SocialIcon.tsx';
 import { TeamMemberModal } from './TeamMemberModal.tsx';
+import { ConfirmDialog } from './ConfirmDialog.tsx';
 import { 
   fetchAdminTeamMembers, 
   createTeamMember, 
@@ -31,12 +32,24 @@ import { FormattedTextWithLinks } from './FormattedTextWithLinks.tsx';
 interface AboutUsAdminSectionProps {
   settings: SiteSettings | null;
   onSaveSettings: (payload: Partial<SiteSettings>) => Promise<void>;
+  userPermissions?: AdminPermission[];
+  isMainAdmin?: boolean;
 }
 
 export const AboutUsAdminSection: React.FC<AboutUsAdminSectionProps> = ({
   settings,
   onSaveSettings,
+  userPermissions,
+  isMainAdmin = false,
 }) => {
+  // Permission checks
+  const canEditAboutUs = isMainAdmin || (userPermissions ? userPermissions.includes('EDIT_ABOUT_US') : true);
+  const canEditDeveloper = isMainAdmin || (userPermissions ? userPermissions.includes('EDIT_DEVELOPER') : true);
+  const canAddMember = isMainAdmin || (userPermissions ? userPermissions.includes('ADD_TEAM_MEMBER') : true);
+  const canEditMember = isMainAdmin || (userPermissions ? userPermissions.includes('EDIT_TEAM_MEMBER') : true);
+  const canDeleteMember = isMainAdmin || (userPermissions ? userPermissions.includes('DELETE_TEAM_MEMBER') : true);
+  const canManageTeamSocial = isMainAdmin || (userPermissions ? userPermissions.includes('MANAGE_TEAM_SOCIAL_LINKS') : true);
+  const canReorderMembers = isMainAdmin || (userPermissions ? userPermissions.includes('REORDER_TEAM_MEMBERS') : true);
   // Brand & Intro state
   const [brandName, setBrandName] = useState('LINK VERSE');
   const [brandTagline, setBrandTagline] = useState('LEARN • EXPLORE • GROW');
@@ -67,6 +80,12 @@ export const AboutUsAdminSection: React.FC<AboutUsAdminSectionProps> = ({
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
+
+  // Delete confirmation state
+  const [deletingMember, setDeletingMember] = useState<TeamMember | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [memberActionMessage, setMemberActionMessage] = useState<string | null>(null);
 
   // Saving state
   const [isSaving, setIsSaving] = useState(false);
@@ -170,21 +189,35 @@ export const AboutUsAdminSection: React.FC<AboutUsAdminSectionProps> = ({
   }) => {
     if (data.id) {
       await updateTeamMember(data.id, data);
+      setMemberActionMessage(`Team member "${data.name}" updated successfully.`);
     } else {
       await createTeamMember(data);
+      setMemberActionMessage(`New team member "${data.name}" added successfully.`);
     }
+    setTimeout(() => setMemberActionMessage(null), 4000);
     await loadTeam();
   };
 
-  const handleDeleteMember = async (member: TeamMember) => {
-    if (!window.confirm(`Are you sure you want to delete team member "${member.name}"?`)) {
-      return;
-    }
+  const handleDeleteMember = (member: TeamMember) => {
+    setDeletingMember(member);
+    setDeleteError(null);
+  };
+
+  const handleConfirmDeleteMember = async () => {
+    if (!deletingMember) return;
+    setIsDeleting(true);
+    setDeleteError(null);
     try {
-      await deleteTeamMember(member.id);
+      const deletedName = deletingMember.name;
+      await deleteTeamMember(deletingMember.id);
+      setDeletingMember(null);
       await loadTeam();
+      setMemberActionMessage(`"${deletedName}" has been successfully deleted from team members.`);
+      setTimeout(() => setMemberActionMessage(null), 4000);
     } catch (err: any) {
-      alert(err.message || 'Failed to delete member');
+      setDeleteError(err.message || 'Failed to delete team member');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -417,6 +450,13 @@ export const AboutUsAdminSection: React.FC<AboutUsAdminSectionProps> = ({
               </div>
             )}
 
+            {memberActionMessage && (
+              <div className="mb-4 p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-xl text-xs text-emerald-700 dark:text-emerald-300 flex items-center gap-2 animate-fadeIn">
+                <Check className="w-4 h-4 text-emerald-500 shrink-0" />
+                <span>{memberActionMessage}</span>
+              </div>
+            )}
+
             {loadingTeam ? (
               <div className="py-8 text-center text-sm text-neutral-400">
                 Loading team members...
@@ -516,18 +556,25 @@ export const AboutUsAdminSection: React.FC<AboutUsAdminSectionProps> = ({
                           <ArrowDown className="w-3.5 h-3.5" />
                         </button>
                         <button
+                          id={`btn-edit-team-member-${member.id}`}
                           type="button"
                           onClick={() => handleOpenEditMember(member)}
-                          className="p-2 text-indigo-400 hover:bg-indigo-950/40 rounded-xl transition-colors ml-1"
+                          className="p-2 text-indigo-500 hover:text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-xl transition-colors ml-1 cursor-pointer"
                           title="Edit member"
                         >
                           <Edit3 className="w-4 h-4" />
                         </button>
                         <button
+                          id={`btn-delete-team-member-${member.id}`}
                           type="button"
+                          disabled={!canDeleteMember}
                           onClick={() => handleDeleteMember(member)}
-                          className="p-2 text-rose-400 hover:bg-rose-950/40 rounded-xl transition-colors"
-                          title="Delete member"
+                          className={`p-2 rounded-xl transition-colors ${
+                            canDeleteMember
+                              ? 'text-rose-500 hover:text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 cursor-pointer'
+                              : 'text-neutral-400 opacity-40 cursor-not-allowed'
+                          }`}
+                          title={canDeleteMember ? `Delete ${member.name}` : 'Permission required to delete team member'}
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -691,7 +738,36 @@ export const AboutUsAdminSection: React.FC<AboutUsAdminSectionProps> = ({
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSave={handleSaveMember}
+        onDelete={(member) => {
+          setIsModalOpen(false);
+          handleDeleteMember(member);
+        }}
         member={editingMember}
+        canManageSocialLinks={canManageTeamSocial}
+        canDelete={canDeleteMember}
+      />
+
+      {/* Delete Team Member Confirmation Modal */}
+      <ConfirmDialog
+        isOpen={!!deletingMember}
+        title="Delete Team Member"
+        message={
+          deletingMember
+            ? `Are you sure you want to delete "${deletingMember.name}" (${deletingMember.role})? This will permanently remove them from the Our Team Members list.`
+            : ''
+        }
+        confirmText="Yes, Delete Member"
+        cancelText="Cancel"
+        isDestructive={true}
+        isLoading={isDeleting}
+        error={deleteError}
+        onConfirm={handleConfirmDeleteMember}
+        onCancel={() => {
+          if (!isDeleting) {
+            setDeletingMember(null);
+            setDeleteError(null);
+          }
+        }}
       />
     </div>
   );
