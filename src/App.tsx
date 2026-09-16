@@ -459,7 +459,7 @@ export default function App() {
                 </div>
                 <div>
                   <h1 id="public-header-title" className="font-bold text-base sm:text-lg text-neutral-900 dark:text-neutral-100 tracking-tight leading-none">
-                    Web App Link Manager
+                    Study Network
                   </h1>
                   <span className="text-[11px] text-neutral-500 dark:text-neutral-400 font-medium">
                     Verified Multi-Server Launcher
@@ -566,7 +566,7 @@ export default function App() {
           <footer className="mt-auto border-t border-neutral-200/60 dark:border-neutral-800/80 bg-white/50 dark:bg-neutral-950 py-6 text-center text-xs text-neutral-400 dark:text-neutral-500">
             <div className="max-w-7xl mx-auto px-4 flex items-center justify-center gap-2">
               <Server className="w-3.5 h-3.5 text-indigo-500" />
-              <span>Web App Link Manager &bull; Safe Multi-Server Architecture</span>
+              <span>Study Network &bull; Safe Multi-Server Architecture</span>
             </div>
           </footer>
         </div>

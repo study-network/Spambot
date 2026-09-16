@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { PublicServer } from '../types.ts';
 import { CategoryBadge } from './CategoryBadge.tsx';
-import { ExternalLink, Loader2, Server } from 'lucide-react';
+import { Loader2, Server } from 'lucide-react';
 import { launchServer } from '../lib/api.ts';
 
 interface ServerListProps {
@@ -103,24 +103,15 @@ export const ServerList: React.FC<ServerListProps> = ({
               </div>
             </div>
 
-            {/* Right: Category badge with status + Action icon */}
-            <div className="flex items-center gap-3">
+            {/* Right: Category badge with status */}
+            <div className="flex items-center gap-2">
+              {isLaunching && (
+                <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />
+              )}
               <CategoryBadge 
                 category={server.category} 
                 status={server.isActive ? 'Active' : 'Inactive'} 
               />
-              
-              <div className="text-neutral-400 group-hover:text-indigo-600 dark:text-neutral-500 dark:group-hover:text-indigo-400 transition-colors">
-                {isLaunching ? (
-                  <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />
-                ) : server.isActive ? (
-                  <ExternalLink className="w-4 h-4 opacity-70 group-hover:opacity-100 transition-opacity" />
-                ) : (
-                  <span className="text-[11px] font-bold text-neutral-400 dark:text-neutral-500 px-1.5 py-0.5 rounded bg-neutral-200/60 dark:bg-neutral-700/60">
-                    OFF
-                  </span>
-                )}
-              </div>
             </div>
           </button>
         );

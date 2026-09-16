@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Send, MessageCircle, Info, Sparkles, ExternalLink, Megaphone, Trophy } from 'lucide-react';
+import { X, Send, MessageCircle, Info, Sparkles, Megaphone, Trophy } from 'lucide-react';
 import { SiteSettings } from '../types.ts';
 
 interface NavigationDrawerProps {
@@ -83,7 +83,7 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
               <div className="flex items-center justify-between px-6 py-5 border-b border-neutral-200/70 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-900/50">
                 <div>
                   <h2 id="drawer-title" className="font-bold text-lg text-neutral-900 dark:text-neutral-100 tracking-tight leading-snug">
-                    Web App Link Manager
+                    Study Network
                   </h2>
                   <p className="text-xs text-neutral-500 dark:text-neutral-400 font-medium">
                     Verified Multi-Server Launcher
@@ -128,7 +128,6 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
                       </span>
                     </div>
                   </div>
-                  <ExternalLink className="w-4 h-4 text-neutral-400 group-hover:text-sky-500 transition-colors" />
                 </button>
 
                 {/* 2. WhatsApp Item */}
@@ -156,7 +155,6 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
                       </span>
                     </div>
                   </div>
-                  <ExternalLink className="w-4 h-4 text-neutral-400 group-hover:text-emerald-500 transition-colors" />
                 </button>
 
                 {/* 3. User's Achievement Item */}
@@ -182,7 +180,7 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
                       </span>
                     </div>
                   </div>
-                  <span className="text-xs font-semibold text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/80">
+                  <span className="text-xs font-semibold text-amber-500 dark:text-amber-400 px-2 py-0.5">
                     View
                   </span>
                 </button>
@@ -210,7 +208,7 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
                       </span>
                     </div>
                   </div>
-                  <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/80">
+                  <span className="text-xs font-semibold text-indigo-400 dark:text-indigo-400 px-2 py-0.5">
                     View
                   </span>
                 </button>
