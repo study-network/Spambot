@@ -219,23 +219,23 @@ export async function initDatabase(): Promise<Database> {
         console.log('[Database] Added message_content column to site_settings');
       }
 
-      // Brand / About Us / Developer columns migration
+      // Brand / About Us / Developer columns migration (clean schema defaults)
       const brandCols: Array<{ name: string; type: string; defaultVal: string }> = [
-        { name: 'brand_name', type: 'TEXT', defaultVal: "'LINK VERSE'" },
-        { name: 'brand_tagline', type: 'TEXT', defaultVal: "'LEARN • EXPLORE • GROW'" },
+        { name: 'brand_name', type: 'TEXT', defaultVal: "'Study Network'" },
+        { name: 'brand_tagline', type: 'TEXT', defaultVal: "''" },
         { name: 'brand_logo', type: 'TEXT', defaultVal: "''" },
-        { name: 'about_message_title', type: 'TEXT', defaultVal: "'Knowledge shared is a brighter tomorrow.'" },
-        { name: 'about_message_subtitle', type: 'TEXT', defaultVal: "'Stay Connected • Stay Curious • Stay Ahead'" },
+        { name: 'about_message_title', type: 'TEXT', defaultVal: "''" },
+        { name: 'about_message_subtitle', type: 'TEXT', defaultVal: "''" },
         { name: 'about_message_icon', type: 'TEXT', defaultVal: "''" },
-        { name: 'developer_name', type: 'TEXT', defaultVal: "'Ritesh'" },
-        { name: 'developer_role', type: 'TEXT', defaultVal: "'Founder & Developer'" },
+        { name: 'developer_name', type: 'TEXT', defaultVal: "''" },
+        { name: 'developer_role', type: 'TEXT', defaultVal: "''" },
         { name: 'developer_description', type: 'TEXT', defaultVal: "''" },
         { name: 'developer_photo', type: 'TEXT', defaultVal: "''" },
-        { name: 'developer_tagline', type: 'TEXT', defaultVal: "'Code • Create • Contribute • Grow'" },
+        { name: 'developer_tagline', type: 'TEXT', defaultVal: "''" },
         { name: 'developer_social_links', type: 'TEXT', defaultVal: "'[]'" },
-        { name: 'about_footer_title', type: 'TEXT', defaultVal: "'Thanks for being a part of LINK VERSE.'" },
-        { name: 'about_footer_subtitle', type: 'TEXT', defaultVal: "'Together, we can make learning simple, free and accessible for everyone.'" },
-        { name: 'about_footer_tagline', type: 'TEXT', defaultVal: "'Keep Learning • Keep Exploring • Keep Growing'" },
+        { name: 'about_footer_title', type: 'TEXT', defaultVal: "''" },
+        { name: 'about_footer_subtitle', type: 'TEXT', defaultVal: "''" },
+        { name: 'about_footer_tagline', type: 'TEXT', defaultVal: "''" },
       ];
 
       for (const col of brandCols) {
@@ -248,48 +248,6 @@ export async function initDatabase(): Promise<Database> {
           }
         }
       }
-
-      // Initialize default developer description if empty
-      const defaultDevBio = "Hi! I'm the developer of LINK VERSE. I build this platform to make learning and resources easily accessible for everyone. My goal is to create a simple, fast and helpful platform for students and learners.";
-      const devBioCheck = db.prepare(`SELECT developer_description FROM site_settings LIMIT 1`);
-      if (devBioCheck.step()) {
-        const val = devBioCheck.get();
-        if (!val[0] || String(val[0]).trim() === '') {
-          db.run(`UPDATE site_settings SET developer_description = ? WHERE id = (SELECT id FROM site_settings LIMIT 1)`, [defaultDevBio]);
-          console.log('[Database] Initialized default developer description');
-        }
-      }
-      devBioCheck.free();
-
-      // Initialize default developer social links if currently empty or '[]'
-      const devSocialCheck = db.prepare(`SELECT developer_social_links FROM site_settings LIMIT 1`);
-      if (devSocialCheck.step()) {
-        const val = devSocialCheck.get();
-        if (!val[0] || String(val[0]).trim() === '' || String(val[0]).trim() === '[]') {
-          const defaultDevSocials = JSON.stringify([
-            { id: 'dev-1', platform: 'telegram', url: 'https://t.me/ritesh' },
-            { id: 'dev-2', platform: 'whatsapp', url: 'https://wa.me/919876543210' },
-            { id: 'dev-3', platform: 'instagram', url: 'https://instagram.com/ritesh' },
-            { id: 'dev-4', platform: 'youtube', url: 'https://youtube.com/@ritesh' },
-            { id: 'dev-5', platform: 'github', url: 'https://github.com/ritesh' },
-          ]);
-          db.run(`UPDATE site_settings SET developer_social_links = ? WHERE id = (SELECT id FROM site_settings LIMIT 1)`, [defaultDevSocials]);
-          console.log('[Database] Initialized default developer social links');
-        }
-      }
-      devSocialCheck.free();
-
-      // Populate default message content if it's empty so the user sees the example immediately
-      const defaultExampleMsg = `📚 Stay consistent and keep learning every day.\n🚫 Do not misuse or share restricted links.\n💡 Use this platform only for educational purposes.\n❤️ Keep learning and stay motivated!`;
-      const currentMsgStmt = db.prepare(`SELECT message_content FROM site_settings LIMIT 1`);
-      if (currentMsgStmt.step()) {
-        const existingVal = currentMsgStmt.get();
-        if (!existingVal[0] || String(existingVal[0]).trim() === '') {
-          db.run(`UPDATE site_settings SET message_title = 'Important Message', message_content = ? WHERE id = (SELECT id FROM site_settings LIMIT 1)`, [defaultExampleMsg]);
-          console.log('[Database] Initialized default example message in site_settings');
-        }
-      }
-      currentMsgStmt.free();
       saveDb();
     }
   } catch (migErr) {
@@ -313,298 +271,33 @@ export async function initDatabase(): Promise<Database> {
     console.warn('[Database] achievements migration notice:', migErr);
   }
 
-  // Seed default achievement message if table exists but empty
-  try {
-    const msgCheck = db.exec(`SELECT id FROM achievement_message WHERE id = 'default' LIMIT 1`);
-    if (msgCheck.length === 0 || msgCheck[0].values.length === 0) {
-      const defaultAchievementMsg = `Keep working hard and stay consistent.\nYour hard work will definitely pay off.\nNever give up on your goals.\nKeep learning and improving every day. ❤️`;
-      const mStmt = db.prepare(`
-        INSERT INTO achievement_message (id, title, content, updated_at)
-        VALUES ('default', 'Important Message', ?, ?)
-      `);
-      mStmt.run([defaultAchievementMsg, new Date().toISOString()]);
-      mStmt.free();
-      saveDb();
-      console.log('[Database] Seeded default achievement message');
-    }
-  } catch (msgErr) {
-    console.warn('[Database] achievement_message seed notice:', msgErr);
-  }
-
-  // Seed default notice message into messages table if empty
-  try {
-    const msgCount = db.exec(`SELECT count(*) FROM messages`);
-    if (msgCount.length > 0 && Number(msgCount[0].values[0][0]) === 0) {
-      const now = new Date().toISOString();
-      const defaultNotice = `📚 Stay consistent and keep learning every day.\n🚫 Do not misuse or share restricted links.\n💡 Use this platform only for educational purposes.\n❤️ Keep learning and stay motivated!`;
-      const mStmt = db.prepare(`
-        INSERT INTO messages (id, title, content, is_published, sort_order, link_url, link_label, created_at, updated_at)
-        VALUES (?, ?, ?, 1, 0, '', '', ?, ?)
-      `);
-      mStmt.run([crypto.randomUUID(), 'Important Message', defaultNotice, now, now]);
-      mStmt.free();
-      saveDb();
-      console.log('[Database] Seeded initial notice in messages table');
-    }
-  } catch (msgNoticeErr) {
-    console.warn('[Database] messages seed notice:', msgNoticeErr);
-  }
-
-  // Seed default admin accounts from environment variables (.env)
-  const envAdminId = (process.env.ADMIN_ID || process.env.ADMIN_USERNAME || '').toLowerCase().trim();
-  const envEmail = (process.env.ADMIN_EMAIL || '').toLowerCase().trim();
-  const envPass = process.env.ADMIN_PASSWORD;
-
-  const seedUsers: Array<{ email: string; pass: string }> = [
-    { email: 'admin', pass: 'admin' },
-    { email: 'admin@example.com', pass: 'Admin@123456' },
-    { email: 'admin10@gmail.com', pass: 'admin' },
-  ];
-
-  if (envAdminId && envPass) {
-    const existing = seedUsers.find(u => u.email === envAdminId);
-    if (existing) {
-      existing.pass = envPass;
-    } else {
-      seedUsers.unshift({ email: envAdminId, pass: envPass });
-    }
-  }
-
-  if (envEmail && envPass) {
-    const existing = seedUsers.find(u => u.email === envEmail);
-    if (existing) {
-      existing.pass = envPass;
-    } else {
-      seedUsers.unshift({ email: envEmail, pass: envPass });
-    }
-  }
-
-  for (const u of seedUsers) {
-    const checkStmt = db.prepare(`SELECT id, password_hash FROM users WHERE email = ? LIMIT 1`);
-    checkStmt.bind([u.email.toLowerCase().trim()]);
-    const hasRow = checkStmt.step();
-    if (!hasRow) {
-      checkStmt.free();
-      const salt = bcrypt.genSaltSync(10);
-      const hash = bcrypt.hashSync(u.pass, salt);
-      const id = crypto.randomUUID();
-      const now = new Date().toISOString();
-
-      const stmt = db.prepare(`
-        INSERT INTO users (id, email, password_hash, role, created_at)
-        VALUES (?, ?, ?, 'admin', ?)
-      `);
-      stmt.run([id, u.email.toLowerCase().trim(), hash, now]);
-      stmt.free();
-      console.log(`[Database] Initialized admin account: ${u.email}`);
-    } else {
-      const row = checkStmt.get();
-      checkStmt.free();
-      const currentHash = String(row[1]);
-      if (!bcrypt.compareSync(u.pass, currentHash)) {
-        const salt = bcrypt.genSaltSync(10);
-        const newHash = bcrypt.hashSync(u.pass, salt);
-        const updateStmt = db.prepare(`UPDATE users SET password_hash = ? WHERE email = ?`);
-        updateStmt.run([newHash, u.email.toLowerCase().trim()]);
-        updateStmt.free();
-      }
-    }
-  }
-
-  // Seed sample web apps if empty
-  const appCheck = db.exec(`SELECT id FROM web_apps LIMIT 1`);
-  if (appCheck.length === 0 || appCheck[0].values.length === 0) {
-    console.log('[Database] Seeding initial sample Web Apps and servers...');
-    const now = new Date().toISOString();
-
-    // 1. Study App
-    const studyId = crypto.randomUUID();
-    let stmt = db.prepare(`INSERT INTO web_apps (id, name, icon, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`);
-    stmt.run([studyId, 'Study App', 'https://images.unsplash.com/photo-1532012164546-f432f2e3777a?auto=format&fit=crop&w=256&q=80', now, now]);
-    stmt.free();
-
-    const studyServers = [
-      { url: 'https://khanacademy.org', category: 'Working' },
-      { url: 'https://coursera.org/broken-link', category: 'Error' },
-      { url: 'https://edx.org', category: 'Unfilter' },
-      { url: 'https://quizlet.com', category: 'Working' },
-    ];
-    studyServers.forEach((s, idx) => {
-      const sStmt = db!.prepare(`INSERT INTO servers (id, web_app_id, url, category, sort_order, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)`);
-      sStmt.run([crypto.randomUUID(), studyId, s.url, s.category, idx + 1, now, now]);
-      sStmt.free();
-    });
-
-    // 2. Movie App
-    const movieId = crypto.randomUUID();
-    stmt = db.prepare(`INSERT INTO web_apps (id, name, icon, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`);
-    stmt.run([movieId, 'Movie App', 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&w=256&q=80', now, now]);
-    stmt.free();
-
-    const movieServers = [
-      { url: 'https://imdb.com', category: 'Working' },
-      { url: 'https://themoviedb.org', category: 'Working' },
-      { url: 'https://stream-archive.invalid/test', category: 'Error' },
-    ];
-    movieServers.forEach((s, idx) => {
-      const sStmt = db!.prepare(`INSERT INTO servers (id, web_app_id, url, category, sort_order, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)`);
-      sStmt.run([crypto.randomUUID(), movieId, s.url, s.category, idx + 1, now, now]);
-      sStmt.free();
-    });
-
-    // 3. Tools App
-    const toolsId = crypto.randomUUID();
-    stmt = db.prepare(`INSERT INTO web_apps (id, name, icon, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`);
-    stmt.run([toolsId, 'Tools App', 'https://images.unsplash.com/photo-1581291518857-4e27b48ff24e?auto=format&fit=crop&w=256&q=80', now, now]);
-    stmt.free();
-
-    const toolsServers = [
-      { url: 'https://github.com', category: 'Working' },
-      { url: 'https://developer.mozilla.org', category: 'Unfilter' },
-      { url: 'https://stackoverflow.com', category: 'Working' },
-    ];
-    toolsServers.forEach((s, idx) => {
-      const sStmt = db!.prepare(`INSERT INTO servers (id, web_app_id, url, category, sort_order, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)`);
-      sStmt.run([crypto.randomUUID(), toolsId, s.url, s.category, idx + 1, now, now]);
-      sStmt.free();
-    });
-  }
-
-  // Seed site settings if empty
+  // Initialize clean site settings row if table is completely empty
   const settingsCheck = db.exec(`SELECT id FROM site_settings LIMIT 1`);
   if (settingsCheck.length === 0 || settingsCheck[0].values.length === 0) {
     const now = new Date().toISOString();
     const sId = 'default_settings';
     const stmt = db.prepare(`
       INSERT INTO site_settings (
-        id, telegram_url, whatsapp_url, about_title, about_description, happy_title, happy_message, happy_icon, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, telegram_url, whatsapp_url, about_title, about_description,
+        happy_title, happy_message, happy_icon, message_title, message_content,
+        brand_name, brand_tagline, brand_logo,
+        about_message_title, about_message_subtitle, about_message_icon,
+        developer_name, developer_role, developer_description, developer_photo, developer_tagline, developer_social_links,
+        about_footer_title, about_footer_subtitle, about_footer_tagline,
+        created_at, updated_at
+      ) VALUES (
+        ?, '', '', 'About Us', '',
+        'Stay Happy', '', '💜', 'Important Message', '',
+        'Study Network', '', '',
+        '', '', '',
+        '', '', '', '', '', '[]',
+        '', '', '',
+        ?, ?
+      )
     `);
-    stmt.run([
-      sId,
-      'https://t.me/example',
-      'https://wa.me/example',
-      'About Us',
-      'Welcome to Web App Link Manager. We provide verified multi-server link routing with real-time status indicators, high-speed failover, and zero downtime connection to your favourite web applications.',
-      'Stay Happy',
-      'Good things take time 💜',
-      '💜',
-      now,
-      now,
-    ]);
+    stmt.run([sId, now, now]);
     stmt.free();
-    console.log('[Database] Initialized default site settings');
-  }
-
-  // Seed sample achievements if table is empty
-  const achieveCheck = db.exec(`SELECT id FROM achievements LIMIT 1`);
-  if (achieveCheck.length === 0 || achieveCheck[0].values.length === 0) {
-    console.log('[Database] Seeding initial sample achievements...');
-    const samples = [
-      {
-        id: crypto.randomUUID(),
-        imageUrl: 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=1000&q=80',
-        comment: 'Congratulations Ritesh! 🎉\nYour hard work and consistency have paid off.\nKeep learning and keep growing. You can achieve even more...\nProud of you! ❤️',
-        createdAt: '2025-06-20T10:00:00.000Z',
-      },
-      {
-        id: crypto.randomUUID(),
-        imageUrl: 'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=1000&q=80',
-        comment: 'Small steps every day make a big difference.\nStay consistent and keep moving forward! 💪',
-        createdAt: '2025-06-15T10:00:00.000Z',
-      },
-      {
-        id: crypto.randomUUID(),
-        imageUrl: 'https://images.unsplash.com/photo-1519834785169-98be25ec3f84?auto=format&fit=crop&w=1000&q=80',
-        comment: 'Keep going!\nSuccess is a journey, not a destination. ❤️',
-        createdAt: '2025-06-10T10:00:00.000Z',
-      },
-    ];
-
-    for (const sample of samples) {
-      const aStmt = db.prepare(`
-        INSERT INTO achievements (id, image_url, comment, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?)
-      `);
-      aStmt.run([sample.id, sample.imageUrl, sample.comment, sample.createdAt, sample.createdAt]);
-      aStmt.free();
-    }
-    console.log('[Database] Initialized default sample achievements');
-  }
-
-  // Seed sample team members if table is empty
-  const teamCheck = db.exec(`SELECT id FROM team_members LIMIT 1`);
-  if (teamCheck.length === 0 || teamCheck[0].values.length === 0) {
-    console.log('[Database] Seeding initial sample team members...');
-    const now = new Date().toISOString();
-    const defaultMembers = [
-      {
-        id: 'team-1',
-        name: 'Ritesh',
-        role: 'Founder & Developer',
-        description: 'A passionate developer who loves to build useful learning tools for everyone.',
-        photo: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=300&q=80',
-        sortOrder: 1,
-        socialLinks: [
-          { id: 't-1-1', platform: 'telegram', url: 'https://t.me/ritesh' },
-          { id: 't-1-2', platform: 'github', url: 'https://github.com/ritesh' },
-          { id: 't-1-3', platform: 'youtube', url: 'https://youtube.com/@ritesh' },
-        ],
-      },
-      {
-        id: 'team-2',
-        name: 'Aman',
-        role: 'Backend Support',
-        description: 'Backend architect specializing in distributed servers and secure link routing.',
-        photo: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=300&q=80',
-        sortOrder: 2,
-        socialLinks: [
-          { id: 't-2-1', platform: 'github', url: 'https://github.com/aman' },
-          { id: 't-2-2', platform: 'linkedin', url: 'https://linkedin.com/in/aman' },
-        ],
-      },
-      {
-        id: 'team-3',
-        name: 'Priya',
-        role: 'UI/UX Designer',
-        description: 'Creative product designer shaping clean, accessible interfaces for students.',
-        photo: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=300&q=80',
-        sortOrder: 3,
-        socialLinks: [
-          { id: 't-3-1', platform: 'instagram', url: 'https://instagram.com/priya' },
-          { id: 't-3-2', platform: 'linkedin', url: 'https://linkedin.com/in/priya' },
-        ],
-      },
-      {
-        id: 'team-4',
-        name: 'Sahil',
-        role: 'Content Manager',
-        description: 'Content manager curating verified resources and educational links.',
-        photo: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80',
-        sortOrder: 4,
-        socialLinks: [], // No social links, exactly matching screenshot!
-      },
-    ];
-
-    for (const member of defaultMembers) {
-      const tmStmt = db.prepare(`
-        INSERT INTO team_members (id, name, role, description, photo, sort_order, social_links, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
-      tmStmt.run([
-        member.id,
-        member.name,
-        member.role,
-        member.description,
-        member.photo,
-        member.sortOrder,
-        JSON.stringify(member.socialLinks),
-        now,
-        now,
-      ]);
-      tmStmt.free();
-    }
-    console.log('[Database] Initialized default sample team members');
+    console.log('[Database] Initialized baseline clean site settings');
   }
 
   saveDb();
@@ -973,33 +666,27 @@ export function getSiteSettings() {
       telegramUrl: '',
       whatsappUrl: '',
       aboutTitle: 'About Us',
-      aboutDescription: 'Welcome to Web App Link Manager. Safe and fast access to your favorite web applications.',
+      aboutDescription: '',
       happyTitle: 'Stay Happy',
-      happyMessage: 'Good things take time 💜',
+      happyMessage: '',
       happyIcon: '💜',
       messageTitle: 'Important Message',
-      messageContent: '📚 Stay consistent and keep learning every day.\n🚫 Do not misuse or share restricted links.\n💡 Use this platform only for educational purposes.\n❤️ Keep learning and stay motivated!',
-      brandName: 'LINK VERSE',
-      brandTagline: 'LEARN • EXPLORE • GROW',
+      messageContent: '',
+      brandName: 'Study Network',
+      brandTagline: '',
       brandLogo: '',
-      aboutMessageTitle: 'Knowledge shared is a brighter tomorrow.',
-      aboutMessageSubtitle: 'Stay Connected • Stay Curious • Stay Ahead',
+      aboutMessageTitle: '',
+      aboutMessageSubtitle: '',
       aboutMessageIcon: '',
-      developerName: 'Ritesh',
-      developerRole: 'Founder & Developer',
-      developerDescription: "Hi! I'm the developer of LINK VERSE. I build this platform to make learning and resources easily accessible for everyone. My goal is to create a simple, fast and helpful platform for students and learners.",
+      developerName: '',
+      developerRole: '',
+      developerDescription: '',
       developerPhoto: '',
-      developerTagline: 'Code • Create • Contribute • Grow',
-      developerSocialLinks: [
-        { id: 'dev-1', platform: 'telegram', url: 'https://t.me/ritesh' },
-        { id: 'dev-2', platform: 'whatsapp', url: 'https://wa.me/919876543210' },
-        { id: 'dev-3', platform: 'instagram', url: 'https://instagram.com/ritesh' },
-        { id: 'dev-4', platform: 'youtube', url: 'https://youtube.com/@ritesh' },
-        { id: 'dev-5', platform: 'github', url: 'https://github.com/ritesh' },
-      ],
-      aboutFooterTitle: 'Thanks for being a part of LINK VERSE.',
-      aboutFooterSubtitle: 'Together, we can make learning simple, free and accessible for everyone.',
-      aboutFooterTagline: 'Keep Learning • Keep Exploring • Keep Growing',
+      developerTagline: '',
+      developerSocialLinks: [],
+      aboutFooterTitle: '',
+      aboutFooterSubtitle: '',
+      aboutFooterTagline: '',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -1024,25 +711,25 @@ export function getSiteSettings() {
     aboutTitle: String(row[3] || 'About Us'),
     aboutDescription: String(row[4] || ''),
     happyTitle: String(row[5] || 'Stay Happy'),
-    happyMessage: String(row[6] || 'Good things take time 💜'),
+    happyMessage: String(row[6] || ''),
     happyIcon: String(row[7] || '💜'),
     messageTitle: String(row[8] ?? 'Important Message'),
     messageContent: String(row[9] ?? ''),
-    brandName: String(row[10] || 'LINK VERSE'),
-    brandTagline: String(row[11] || 'LEARN • EXPLORE • GROW'),
+    brandName: String(row[10] || 'Study Network'),
+    brandTagline: String(row[11] || ''),
     brandLogo: String(row[12] || ''),
-    aboutMessageTitle: String(row[13] || 'Knowledge shared is a brighter tomorrow.'),
-    aboutMessageSubtitle: String(row[14] || 'Stay Connected • Stay Curious • Stay Ahead'),
+    aboutMessageTitle: String(row[13] || ''),
+    aboutMessageSubtitle: String(row[14] || ''),
     aboutMessageIcon: String(row[15] || ''),
-    developerName: String(row[16] || 'Ritesh'),
-    developerRole: String(row[17] || 'Founder & Developer'),
-    developerDescription: String(row[18] || "Hi! I'm the developer of LINK VERSE. I build this platform to make learning and resources easily accessible for everyone. My goal is to create a simple, fast and helpful platform for students and learners."),
+    developerName: String(row[16] || ''),
+    developerRole: String(row[17] || ''),
+    developerDescription: String(row[18] || ''),
     developerPhoto: String(row[19] || ''),
-    developerTagline: String(row[20] || 'Code • Create • Contribute • Grow'),
+    developerTagline: String(row[20] || ''),
     developerSocialLinks: Array.isArray(devLinks) ? devLinks : [],
-    aboutFooterTitle: String(row[22] || 'Thanks for being a part of LINK VERSE.'),
-    aboutFooterSubtitle: String(row[23] || 'Together, we can make learning simple, free and accessible for everyone.'),
-    aboutFooterTagline: String(row[24] || 'Keep Learning • Keep Exploring • Keep Growing'),
+    aboutFooterTitle: String(row[22] || ''),
+    aboutFooterSubtitle: String(row[23] || ''),
+    aboutFooterTagline: String(row[24] || ''),
     createdAt: String(row[25]),
     updatedAt: String(row[26]),
   };
@@ -1091,17 +778,17 @@ export function updateSiteSettings(payload: {
   const messageTitle = payload.messageTitle !== undefined ? payload.messageTitle.trim() : (existing.messageTitle || 'Important Message');
   const messageContent = payload.messageContent !== undefined ? payload.messageContent : (existing.messageContent || '');
 
-  const brandName = payload.brandName !== undefined ? payload.brandName.trim() : (existing.brandName || 'LINK VERSE');
-  const brandTagline = payload.brandTagline !== undefined ? payload.brandTagline.trim() : (existing.brandTagline || 'LEARN • EXPLORE • GROW');
+  const brandName = payload.brandName !== undefined ? payload.brandName.trim() : (existing.brandName || 'Study Network');
+  const brandTagline = payload.brandTagline !== undefined ? payload.brandTagline.trim() : (existing.brandTagline || '');
   const brandLogo = payload.brandLogo !== undefined ? payload.brandLogo.trim() : (existing.brandLogo || '');
-  const aboutMessageTitle = payload.aboutMessageTitle !== undefined ? payload.aboutMessageTitle.trim() : (existing.aboutMessageTitle || 'Knowledge shared is a brighter tomorrow.');
-  const aboutMessageSubtitle = payload.aboutMessageSubtitle !== undefined ? payload.aboutMessageSubtitle.trim() : (existing.aboutMessageSubtitle || 'Stay Connected • Stay Curious • Stay Ahead');
+  const aboutMessageTitle = payload.aboutMessageTitle !== undefined ? payload.aboutMessageTitle.trim() : (existing.aboutMessageTitle || '');
+  const aboutMessageSubtitle = payload.aboutMessageSubtitle !== undefined ? payload.aboutMessageSubtitle.trim() : (existing.aboutMessageSubtitle || '');
   const aboutMessageIcon = payload.aboutMessageIcon !== undefined ? payload.aboutMessageIcon.trim() : (existing.aboutMessageIcon || '');
-  const developerName = payload.developerName !== undefined ? payload.developerName.trim() : (existing.developerName || 'Ritesh');
-  const developerRole = payload.developerRole !== undefined ? payload.developerRole.trim() : (existing.developerRole || 'Founder & Developer');
+  const developerName = payload.developerName !== undefined ? payload.developerName.trim() : (existing.developerName || '');
+  const developerRole = payload.developerRole !== undefined ? payload.developerRole.trim() : (existing.developerRole || '');
   const developerDescription = payload.developerDescription !== undefined ? payload.developerDescription.trim() : (existing.developerDescription || '');
   const developerPhoto = payload.developerPhoto !== undefined ? payload.developerPhoto.trim() : (existing.developerPhoto || '');
-  const developerTagline = payload.developerTagline !== undefined ? payload.developerTagline.trim() : (existing.developerTagline || 'Code • Create • Contribute • Grow');
+  const developerTagline = payload.developerTagline !== undefined ? payload.developerTagline.trim() : (existing.developerTagline || '');
   
   let developerSocialLinksStr = JSON.stringify(existing.developerSocialLinks || []);
   if (payload.developerSocialLinks !== undefined) {
@@ -1112,9 +799,9 @@ export function updateSiteSettings(payload: {
     developerSocialLinksStr = JSON.stringify(cleaned.links);
   }
 
-  const aboutFooterTitle = payload.aboutFooterTitle !== undefined ? payload.aboutFooterTitle.trim() : (existing.aboutFooterTitle || 'Thanks for being a part of LINK VERSE.');
-  const aboutFooterSubtitle = payload.aboutFooterSubtitle !== undefined ? payload.aboutFooterSubtitle.trim() : (existing.aboutFooterSubtitle || 'Together, we can make learning simple, free and accessible for everyone.');
-  const aboutFooterTagline = payload.aboutFooterTagline !== undefined ? payload.aboutFooterTagline.trim() : (existing.aboutFooterTagline || 'Keep Learning • Keep Exploring • Keep Growing');
+  const aboutFooterTitle = payload.aboutFooterTitle !== undefined ? payload.aboutFooterTitle.trim() : (existing.aboutFooterTitle || '');
+  const aboutFooterSubtitle = payload.aboutFooterSubtitle !== undefined ? payload.aboutFooterSubtitle.trim() : (existing.aboutFooterSubtitle || '');
+  const aboutFooterTagline = payload.aboutFooterTagline !== undefined ? payload.aboutFooterTagline.trim() : (existing.aboutFooterTagline || '');
 
   const check = database.exec(`SELECT id FROM site_settings WHERE id = '${rowId}'`);
   if (check.length > 0 && check[0].values.length > 0) {
@@ -1153,7 +840,7 @@ export function updateSiteSettings(payload: {
       aboutTitle || 'About Us',
       aboutDescription,
       happyTitle || 'Stay Happy',
-      happyMessage || 'Good things take time 💜',
+      happyMessage,
       happyIcon || '💜',
       messageTitle || 'Important Message',
       messageContent,
@@ -1193,7 +880,7 @@ export function updateSiteSettings(payload: {
       aboutTitle || 'About Us',
       aboutDescription,
       happyTitle || 'Stay Happy',
-      happyMessage || 'Good things take time 💜',
+      happyMessage,
       happyIcon || '💜',
       messageTitle || 'Important Message',
       messageContent,
