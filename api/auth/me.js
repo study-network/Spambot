@@ -18,8 +18,10 @@ var __dirname = __filename ? path.dirname(__filename) : process.cwd();
 var isVercel = process.env.VERCEL === "1" || Boolean(process.env.VERCEL_ENV) || Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME);
 var REPO_DATA_DIR = path.resolve(process.cwd(), "data");
 var REPO_DB_FILE = path.join(REPO_DATA_DIR, "app_links.sqlite");
-var DATA_DIR = isVercel ? "/tmp" : REPO_DATA_DIR;
-var DB_FILE = process.env.DATABASE_FILE ? path.isAbsolute(process.env.DATABASE_FILE) ? process.env.DATABASE_FILE : path.resolve(process.cwd(), process.env.DATABASE_FILE) : isVercel ? path.join("/tmp", "app_links.sqlite") : path.join(DATA_DIR, "app_links.sqlite");
+var isValidDbPath = (p) => Boolean(
+  p && p.trim() !== "admin" && (p.endsWith(".sqlite") || p.endsWith(".db") || p.includes("/") || p.includes("\\"))
+);
+var DB_FILE = isValidDbPath(process.env.DATABASE_FILE) ? path.isAbsolute(process.env.DATABASE_FILE) ? process.env.DATABASE_FILE : path.resolve(process.cwd(), process.env.DATABASE_FILE) : isVercel ? path.join("/tmp", "app_links.sqlite") : REPO_DB_FILE;
 var db = null;
 function ensureDirectoryExists(filePath) {
   try {
@@ -48,7 +50,12 @@ function saveDb() {
   try {
     ensureDirectoryExists(DB_FILE);
     const data = db.export();
-    fs.writeFileSync(DB_FILE, Buffer.from(data));
+    const buffer = Buffer.from(data);
+    fs.writeFileSync(DB_FILE, buffer);
+    if (DB_FILE !== REPO_DB_FILE && !isVercel) {
+      ensureDirectoryExists(REPO_DB_FILE);
+      fs.writeFileSync(REPO_DB_FILE, buffer);
+    }
   } catch (err) {
     console.error("Failed to save database to disk:", err);
   }
@@ -328,31 +335,6 @@ async function initDatabase() {
     userStmt.run([defaultAdminId, "admin", defaultHash, "admin", now]);
     userStmt.free();
     console.log("[Database] Seeded baseline fallback admin into users table");
-  }
-  const appsCheck = db.exec(`SELECT id FROM web_apps LIMIT 1`);
-  if (appsCheck.length === 0 || appsCheck[0].values.length === 0) {
-    const now = (/* @__PURE__ */ new Date()).toISOString();
-    const app1Id = "8c87887e-cf9b-4092-84cf-d5a38585a28d";
-    const app2Id = "2301455b-1092-473d-92a1-be904df6da8d";
-    const app3Id = "a8475b2e-3f85-4e0c-85ca-73e047f23cbb";
-    const appStmt = db.prepare(`INSERT INTO web_apps (id, name, icon, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`);
-    appStmt.run([app1Id, "Study App", "https://images.unsplash.com/photo-1532012164546-f432f2e3777a?auto=format&fit=crop&w=256&q=80", now, now]);
-    appStmt.run([app2Id, "Movie App", "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&w=256&q=80", now, now]);
-    appStmt.run([app3Id, "Tools App", "https://images.unsplash.com/photo-1581291518857-4e27b48ff24e?auto=format&fit=crop&w=256&q=80", now, now]);
-    appStmt.free();
-    const serverStmt = db.prepare(`INSERT INTO servers (id, web_app_id, url, category, sort_order, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
-    serverStmt.run([crypto.randomUUID(), app1Id, "https://example.com/study1", "Working", 1, 1, now, now]);
-    serverStmt.run([crypto.randomUUID(), app1Id, "https://example.com/study2", "Error", 2, 1, now, now]);
-    serverStmt.run([crypto.randomUUID(), app1Id, "https://example.com/study3", "Unfilter", 3, 1, now, now]);
-    serverStmt.run([crypto.randomUUID(), app1Id, "https://example.com/study4", "Working", 4, 1, now, now]);
-    serverStmt.run([crypto.randomUUID(), app2Id, "https://example.com/movie1", "Working", 1, 1, now, now]);
-    serverStmt.run([crypto.randomUUID(), app2Id, "https://example.com/movie2", "Working", 2, 1, now, now]);
-    serverStmt.run([crypto.randomUUID(), app2Id, "https://example.com/movie3", "Error", 3, 1, now, now]);
-    serverStmt.run([crypto.randomUUID(), app3Id, "https://example.com/tools1", "Working", 1, 1, now, now]);
-    serverStmt.run([crypto.randomUUID(), app3Id, "https://example.com/tools2", "Unfilter", 2, 1, now, now]);
-    serverStmt.run([crypto.randomUUID(), app3Id, "https://example.com/tools3", "Working", 3, 1, now, now]);
-    serverStmt.free();
-    console.log("[Database] Seeded baseline web apps and servers");
   }
   saveDb();
   return db;
