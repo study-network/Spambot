@@ -9,8 +9,8 @@ import type { Database } from 'sql.js';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __filename = typeof import.meta?.url === 'string' ? fileURLToPath(import.meta.url) : '';
+const __dirname = __filename ? path.dirname(__filename) : process.cwd();
 
 const isVercel = process.env.VERCEL === '1' || Boolean(process.env.VERCEL_ENV) || Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME);
 const REPO_DATA_DIR = path.resolve(process.cwd(), 'data');
@@ -62,26 +62,9 @@ function saveDb() {
 export async function initDatabase(): Promise<Database> {
   if (db) return db;
 
-  let SQL: any = null;
-  try {
-    // Attempt standard sql.js (wasm) only if not in serverless and wasm file is present
-    if (!isVercel) {
-      const wasmPath = path.resolve(process.cwd(), 'node_modules/sql.js/dist/sql-wasm.wasm');
-      if (fs.existsSync(wasmPath)) {
-        const wasmPkg = await import('sql.js');
-        const initFn = (wasmPkg.default || wasmPkg) as any;
-        SQL = await initFn();
-      }
-    }
-  } catch (wasmErr) {
-    console.warn('[Database] WASM init fallback to ASM:', wasmErr);
-  }
-
-  if (!SQL) {
-    // Pure JS ASM build - 100% reliable in Vercel Serverless Functions and AWS Lambda
-    const initAsm = (initSqlJsAsm.default || initSqlJsAsm) as any;
-    SQL = await initAsm();
-  }
+  // Pure JS ASM build - 100% reliable in Vercel Serverless Functions, Docker, and local dev
+  const initFn = (initSqlJsAsm.default || initSqlJsAsm) as any;
+  const SQL = await initFn();
 
   ensureDirectoryExists(DB_FILE);
 
