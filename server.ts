@@ -5,7 +5,6 @@ import type { Request, Response, NextFunction } from 'express';
 import path from 'path';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
-import { createServer as createViteServer } from 'vite';
 import {
   initDatabase,
   getPublicWebApps,
@@ -313,15 +312,15 @@ app.use((req, res, next) => {
   });
 });
 
-// URL normalization for Vercel edge / rewrites
+// URL normalization for Vercel edge / serverless rewrites
 app.use((req, res, next) => {
-  const forwardedUrl = (req.headers['x-forwarded-url'] as string) || (req.headers['x-matched-path'] as string);
-  if (forwardedUrl && forwardedUrl.startsWith('/api')) {
+  const forwardedUrl = req.headers['x-forwarded-url'] as string;
+  if (forwardedUrl && forwardedUrl.startsWith('/api/') && forwardedUrl !== req.url) {
     req.url = forwardedUrl;
-  } else if (req.url && !req.url.startsWith('/api')) {
+  } else if (req.url && !req.url.startsWith('/api/')) {
     const apiPrefixes = ['/health', '/auth', '/webapps', '/settings', '/message', '/achievements', '/team', '/admin', '/servers'];
     if (apiPrefixes.some((p) => req.url.startsWith(p))) {
-      req.url = '/api' + req.url;
+      req.url = '/api' + (req.url.startsWith('/') ? req.url : '/' + req.url);
     }
   }
   next();
@@ -451,17 +450,21 @@ app.get(['/api/health', '/health'], (req, res) => {
   // Admin Login: Authenticates MAIN_ADMIN (via env vars) or OTHER_ADMIN (via database)
   app.post('/api/auth/login', (req, res) => {
     try {
-      const { email, username, password } = req.body;
-      const loginId = (username || email || '').trim();
-      if (!loginId || !password) {
+      const { email, username, password } = req.body || {};
+      const rawLoginId = (username || email || '').trim();
+      if (!rawLoginId || !password) {
         return res.status(400).json({ error: 'Admin ID/Username and password are required' });
       }
 
+      // Allow logging in with or without leading @ (e.g. '@admin' or 'admin')
+      const loginId = rawLoginId.startsWith('@') ? rawLoginId.slice(1).trim() : rawLoginId;
       const mainAdmin = getMainAdminCredentials();
+      const cleanMainAdminId = mainAdmin.id.startsWith('@') ? mainAdmin.id.slice(1).trim() : mainAdmin.id;
 
       // 1. Check if login credentials match MAIN_ADMIN in environment variables
       if (
-        loginId.toLowerCase() === mainAdmin.id.toLowerCase() &&
+        (rawLoginId.toLowerCase() === mainAdmin.id.toLowerCase() ||
+         loginId.toLowerCase() === cleanMainAdminId.toLowerCase()) &&
         password === mainAdmin.password
       ) {
         const token = jwt.sign(
@@ -483,7 +486,7 @@ app.get(['/api/health', '/health'], (req, res) => {
       }
 
       // 2. Check if login credentials match OTHER_ADMIN in database
-      const otherAdmin = getOtherAdminByUsername(loginId);
+      const otherAdmin = getOtherAdminByUsername(loginId) || getOtherAdminByUsername(rawLoginId);
       if (otherAdmin) {
         if (!otherAdmin.isActive) {
           return res.status(403).json({
@@ -516,7 +519,7 @@ app.get(['/api/health', '/health'], (req, res) => {
       }
 
       // 3. Fallback compatibility with legacy users table if any exists
-      const legacyUser = getUserByEmail(loginId);
+      const legacyUser = getUserByEmail(loginId) || getUserByEmail(rawLoginId);
       if (legacyUser) {
         const isMatch = bcrypt.compareSync(password, legacyUser.passwordHash);
         if (isMatch) {
@@ -1611,6 +1614,11 @@ app.get(['/api/health', '/health'], (req, res) => {
     }
   });
 
+  // Explicit JSON 404 for unhandled API requests
+  app.all('/api/*', (req, res) => {
+    res.status(404).json({ error: `API route ${req.method} ${req.path} not found` });
+  });
+
   // ==========================================
   // VITE DEV / PRODUCTION STANDALONE SERVER
   // ==========================================
@@ -1618,6 +1626,7 @@ app.get(['/api/health', '/health'], (req, res) => {
     await ensureDbReady();
 
     if (process.env.NODE_ENV !== 'production') {
+      const { createServer: createViteServer } = await import('vite');
       const vite = await createViteServer({
         server: { middlewareMode: true },
         appType: 'spa',
@@ -1636,12 +1645,10 @@ app.get(['/api/health', '/health'], (req, res) => {
     });
   }
 
-  // Only auto-start the standalone server when executed directly as CLI script and not in serverless mode (e.g. Vercel)
-  const isServerless = process.env.VERCEL === '1' || Boolean(process.env.VERCEL_ENV) || Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME);
-  const entryFile = process.argv[1] || '';
-  const isDirectRun = entryFile.endsWith('server.ts') || entryFile.endsWith('server.cjs');
+  // Only auto-start the standalone server when not in serverless mode (e.g. Vercel)
+  const isServerless = process.env.IS_SERVERLESS === '1' || process.env.VERCEL === '1' || Boolean(process.env.VERCEL_ENV) || Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME);
 
-  if (!isServerless && isDirectRun) {
+  if (!isServerless) {
     startServer().catch(err => {
       console.error('[Server] Fatal startup error:', err);
       process.exit(1);

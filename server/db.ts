@@ -2,11 +2,17 @@ import dotenv from 'dotenv';
 dotenv.config({ override: true });
 import fs from 'fs';
 import path from 'path';
-import initSqlJs, { type Database } from 'sql.js';
+import { fileURLToPath } from 'url';
+// @ts-ignore
+import initSqlJsAsm from 'sql.js/dist/sql-asm.js';
+import type { Database } from 'sql.js';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 
-const isVercel = process.env.VERCEL === '1' || Boolean(process.env.VERCEL_ENV);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const isVercel = process.env.VERCEL === '1' || Boolean(process.env.VERCEL_ENV) || Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME);
 const REPO_DATA_DIR = path.resolve(process.cwd(), 'data');
 const REPO_DB_FILE = path.join(REPO_DATA_DIR, 'app_links.sqlite');
 
@@ -29,6 +35,19 @@ function ensureDirectoryExists(filePath: string) {
   }
 }
 
+function findSourceDbFile(): string | null {
+  const candidatePaths = [
+    path.resolve(process.cwd(), 'data', 'app_links.sqlite'),
+    path.resolve(process.cwd(), 'app_links.sqlite'),
+    path.resolve(__dirname, '..', 'data', 'app_links.sqlite'),
+    path.resolve(__dirname, 'data', 'app_links.sqlite'),
+  ];
+  for (const p of candidatePaths) {
+    if (fs.existsSync(p)) return p;
+  }
+  return null;
+}
+
 function saveDb() {
   if (!db) return;
   try {
@@ -43,14 +62,36 @@ function saveDb() {
 export async function initDatabase(): Promise<Database> {
   if (db) return db;
 
-  const SQL = await initSqlJs();
+  let SQL: any = null;
+  try {
+    // Attempt standard sql.js (wasm) only if not in serverless and wasm file is present
+    if (!isVercel) {
+      const wasmPath = path.resolve(process.cwd(), 'node_modules/sql.js/dist/sql-wasm.wasm');
+      if (fs.existsSync(wasmPath)) {
+        const wasmPkg = await import('sql.js');
+        const initFn = (wasmPkg.default || wasmPkg) as any;
+        SQL = await initFn();
+      }
+    }
+  } catch (wasmErr) {
+    console.warn('[Database] WASM init fallback to ASM:', wasmErr);
+  }
+
+  if (!SQL) {
+    // Pure JS ASM build - 100% reliable in Vercel Serverless Functions and AWS Lambda
+    const initAsm = (initSqlJsAsm.default || initSqlJsAsm) as any;
+    SQL = await initAsm();
+  }
+
   ensureDirectoryExists(DB_FILE);
+
+  const sourceDb = findSourceDbFile();
 
   // If on Vercel and the writable DB in /tmp does not exist yet,
   // copy from the repository bundled sqlite file if present
-  if (isVercel && !fs.existsSync(DB_FILE) && fs.existsSync(REPO_DB_FILE)) {
+  if (isVercel && !fs.existsSync(DB_FILE) && sourceDb) {
     try {
-      fs.copyFileSync(REPO_DB_FILE, DB_FILE);
+      fs.copyFileSync(sourceDb, DB_FILE);
     } catch (err) {
       console.warn('Could not copy repository database to /tmp:', err);
     }
@@ -64,9 +105,9 @@ export async function initDatabase(): Promise<Database> {
       console.warn('Could not read existing database file, creating a fresh one:', e);
       db = new SQL.Database();
     }
-  } else if (fs.existsSync(REPO_DB_FILE)) {
+  } else if (sourceDb) {
     try {
-      const fileBuffer = fs.readFileSync(REPO_DB_FILE);
+      const fileBuffer = fs.readFileSync(sourceDb);
       db = new SQL.Database(fileBuffer);
     } catch (e) {
       db = new SQL.Database();
@@ -324,6 +365,50 @@ export async function initDatabase(): Promise<Database> {
     stmt.run([sId, now, now]);
     stmt.free();
     console.log('[Database] Initialized baseline clean site settings');
+  }
+
+  // Ensure baseline admin user exists in users table if table is completely empty
+  const userCheck = db.exec(`SELECT id FROM users LIMIT 1`);
+  if (userCheck.length === 0 || userCheck[0].values.length === 0) {
+    const now = new Date().toISOString();
+    const defaultAdminId = crypto.randomUUID();
+    const defaultHash = bcrypt.hashSync('admin', 10);
+    const userStmt = db.prepare(`INSERT INTO users (id, email, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?)`);
+    userStmt.run([defaultAdminId, 'admin', defaultHash, 'admin', now]);
+    userStmt.free();
+    console.log('[Database] Seeded baseline fallback admin into users table');
+  }
+
+  // Ensure baseline web apps exist if table is completely empty
+  const appsCheck = db.exec(`SELECT id FROM web_apps LIMIT 1`);
+  if (appsCheck.length === 0 || appsCheck[0].values.length === 0) {
+    const now = new Date().toISOString();
+    const app1Id = '8c87887e-cf9b-4092-84cf-d5a38585a28d';
+    const app2Id = '2301455b-1092-473d-92a1-be904df6da8d';
+    const app3Id = 'a8475b2e-3f85-4e0c-85ca-73e047f23cbb';
+
+    const appStmt = db.prepare(`INSERT INTO web_apps (id, name, icon, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`);
+    appStmt.run([app1Id, 'Study App', 'https://images.unsplash.com/photo-1532012164546-f432f2e3777a?auto=format&fit=crop&w=256&q=80', now, now]);
+    appStmt.run([app2Id, 'Movie App', 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&w=256&q=80', now, now]);
+    appStmt.run([app3Id, 'Tools App', 'https://images.unsplash.com/photo-1581291518857-4e27b48ff24e?auto=format&fit=crop&w=256&q=80', now, now]);
+    appStmt.free();
+
+    const serverStmt = db.prepare(`INSERT INTO servers (id, web_app_id, url, category, sort_order, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+    serverStmt.run([crypto.randomUUID(), app1Id, 'https://example.com/study1', 'Working', 1, 1, now, now]);
+    serverStmt.run([crypto.randomUUID(), app1Id, 'https://example.com/study2', 'Error', 2, 1, now, now]);
+    serverStmt.run([crypto.randomUUID(), app1Id, 'https://example.com/study3', 'Unfilter', 3, 1, now, now]);
+    serverStmt.run([crypto.randomUUID(), app1Id, 'https://example.com/study4', 'Working', 4, 1, now, now]);
+
+    serverStmt.run([crypto.randomUUID(), app2Id, 'https://example.com/movie1', 'Working', 1, 1, now, now]);
+    serverStmt.run([crypto.randomUUID(), app2Id, 'https://example.com/movie2', 'Working', 2, 1, now, now]);
+    serverStmt.run([crypto.randomUUID(), app2Id, 'https://example.com/movie3', 'Error', 3, 1, now, now]);
+
+    serverStmt.run([crypto.randomUUID(), app3Id, 'https://example.com/tools1', 'Working', 1, 1, now, now]);
+    serverStmt.run([crypto.randomUUID(), app3Id, 'https://example.com/tools2', 'Unfilter', 2, 1, now, now]);
+    serverStmt.run([crypto.randomUUID(), app3Id, 'https://example.com/tools3', 'Working', 3, 1, now, now]);
+    serverStmt.free();
+
+    console.log('[Database] Seeded baseline web apps and servers');
   }
 
   saveDb();
