@@ -3,9 +3,26 @@ import app, { ensureDbReady } from './app.ts';
 
 /**
  * Universal Vercel Serverless Function entrypoint.
- * Bundled into api/index.js and api/[...all].js by esbuild at build-time.
+ * Bundled into api/index.js, api/[...all].js, api/auth/login.js, etc.
  */
 export default async function handler(req: any, res: any) {
+  // Check if Vercel passed the path via catch-all query parameters
+  if (req.query) {
+    const catchAll = req.query.all || req.query['...all'] || req.query.path;
+    if (catchAll) {
+      const slug = Array.isArray(catchAll) ? catchAll.join('/') : catchAll;
+      if (slug && !req.url.includes(slug)) {
+        req.url = `/api/${slug}`;
+      }
+    }
+  }
+
+  // Check forwarded headers
+  const forwardedUrl = (req.headers?.['x-forwarded-url'] || req.headers?.['x-matched-path'] || req.headers?.['x-vercel-original-url']) as string;
+  if (forwardedUrl && forwardedUrl.startsWith('/api/') && (!req.url || req.url === '/' || !req.url.startsWith('/api/'))) {
+    req.url = forwardedUrl.split('?')[0];
+  }
+
   try {
     await ensureDbReady();
   } catch (err: any) {

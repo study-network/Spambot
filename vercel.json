@@ -7,6 +7,46 @@
   },
   "rewrites": [
     {
+      "source": "/api/auth/login",
+      "destination": "/api/auth/login.js"
+    },
+    {
+      "source": "/api/auth/me",
+      "destination": "/api/auth/me.js"
+    },
+    {
+      "source": "/api/auth/:path*",
+      "destination": "/api/auth/[...all].js"
+    },
+    {
+      "source": "/api/admin/:path*",
+      "destination": "/api/admin/[...all].js"
+    },
+    {
+      "source": "/api/webapps/:path*",
+      "destination": "/api/webapps/[...all].js"
+    },
+    {
+      "source": "/api/achievements/:path*",
+      "destination": "/api/achievements/[...all].js"
+    },
+    {
+      "source": "/api/servers/:path*",
+      "destination": "/api/servers/[...all].js"
+    },
+    {
+      "source": "/api/team-members/:path*",
+      "destination": "/api/team-members/[...all].js"
+    },
+    {
+      "source": "/api/messages/:path*",
+      "destination": "/api/messages/[...all].js"
+    },
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/[...all].js"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }

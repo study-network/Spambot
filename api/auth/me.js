@@ -2875,6 +2875,13 @@ async function handler(req, res) {
   }
   return app_default(req, res);
 }
+
+// server/vercel-me.ts
+process.env.IS_SERVERLESS = "1";
+async function handler2(req, res) {
+  req.url = "/api/auth/me";
+  return handler(req, res);
+}
 export {
-  handler as default
+  handler2 as default
 };

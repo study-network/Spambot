@@ -314,11 +314,13 @@ app.use((req, res, next) => {
 
 // URL normalization for Vercel edge / serverless rewrites
 app.use((req, res, next) => {
-  const forwardedUrl = req.headers['x-forwarded-url'] as string;
+  const forwardedUrl = (req.headers['x-forwarded-url'] || req.headers['x-matched-path'] || req.headers['x-vercel-original-url']) as string;
   if (forwardedUrl && forwardedUrl.startsWith('/api/') && forwardedUrl !== req.url) {
-    req.url = forwardedUrl;
+    req.url = forwardedUrl.split('?')[0];
+  } else if (req.originalUrl && req.originalUrl.startsWith('/api/') && !req.url.startsWith('/api/')) {
+    req.url = req.originalUrl.split('?')[0];
   } else if (req.url && !req.url.startsWith('/api/')) {
-    const apiPrefixes = ['/health', '/auth', '/webapps', '/settings', '/message', '/achievements', '/team', '/admin', '/servers'];
+    const apiPrefixes = ['/health', '/auth', '/webapps', '/settings', '/message', '/achievements', '/team', '/admin', '/servers', '/messages'];
     if (apiPrefixes.some((p) => req.url.startsWith(p))) {
       req.url = '/api' + (req.url.startsWith('/') ? req.url : '/' + req.url);
     }
@@ -448,7 +450,7 @@ app.get(['/api/health', '/health'], (req, res) => {
   // ==========================================
 
   // Admin Login: Authenticates MAIN_ADMIN (via env vars) or OTHER_ADMIN (via database)
-  app.post('/api/auth/login', (req, res) => {
+  app.post(['/api/auth/login', '/auth/login', '/login'], (req, res) => {
     try {
       const { email, username, password } = req.body || {};
       const rawLoginId = (username || email || '').trim();
@@ -550,7 +552,7 @@ app.get(['/api/health', '/health'], (req, res) => {
   });
 
   // Verify auth session
-  app.get('/api/auth/me', requireAdminAuth, (req: AuthRequest, res) => {
+  app.get(['/api/auth/me', '/auth/me', '/me'], requireAdminAuth, (req: AuthRequest, res) => {
     res.json({ user: req.user });
   });
 

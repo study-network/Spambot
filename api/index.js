@@ -1806,11 +1806,13 @@ app.use((req, res, next) => {
   });
 });
 app.use((req, res, next) => {
-  const forwardedUrl = req.headers["x-forwarded-url"];
+  const forwardedUrl = req.headers["x-forwarded-url"] || req.headers["x-matched-path"] || req.headers["x-vercel-original-url"];
   if (forwardedUrl && forwardedUrl.startsWith("/api/") && forwardedUrl !== req.url) {
-    req.url = forwardedUrl;
+    req.url = forwardedUrl.split("?")[0];
+  } else if (req.originalUrl && req.originalUrl.startsWith("/api/") && !req.url.startsWith("/api/")) {
+    req.url = req.originalUrl.split("?")[0];
   } else if (req.url && !req.url.startsWith("/api/")) {
-    const apiPrefixes = ["/health", "/auth", "/webapps", "/settings", "/message", "/achievements", "/team", "/admin", "/servers"];
+    const apiPrefixes = ["/health", "/auth", "/webapps", "/settings", "/message", "/achievements", "/team", "/admin", "/servers", "/messages"];
     if (apiPrefixes.some((p) => req.url.startsWith(p))) {
       req.url = "/api" + (req.url.startsWith("/") ? req.url : "/" + req.url);
     }
@@ -1911,7 +1913,7 @@ app.get("/api/servers/:serverId/launch", (req, res) => {
     res.status(500).json({ error: "Failed to launch server" });
   }
 });
-app.post("/api/auth/login", (req, res) => {
+app.post(["/api/auth/login", "/auth/login", "/login"], (req, res) => {
   try {
     const { email, username, password } = req.body || {};
     const rawLoginId = (username || email || "").trim();
@@ -1995,7 +1997,7 @@ app.post("/api/auth/login", (req, res) => {
     res.status(500).json({ error: "Internal server error during login" });
   }
 });
-app.get("/api/auth/me", requireAdminAuth, (req, res) => {
+app.get(["/api/auth/me", "/auth/me", "/me"], requireAdminAuth, (req, res) => {
   res.json({ user: req.user });
 });
 app.get("/api/admin/other-admins", requireAdminAuth, requireMainAdmin, (req, res) => {
@@ -2847,6 +2849,19 @@ var app_default = app;
 // server/vercel.ts
 process.env.IS_SERVERLESS = "1";
 async function handler(req, res) {
+  if (req.query) {
+    const catchAll = req.query.all || req.query["...all"] || req.query.path;
+    if (catchAll) {
+      const slug = Array.isArray(catchAll) ? catchAll.join("/") : catchAll;
+      if (slug && !req.url.includes(slug)) {
+        req.url = `/api/${slug}`;
+      }
+    }
+  }
+  const forwardedUrl = req.headers?.["x-forwarded-url"] || req.headers?.["x-matched-path"] || req.headers?.["x-vercel-original-url"];
+  if (forwardedUrl && forwardedUrl.startsWith("/api/") && (!req.url || req.url === "/" || !req.url.startsWith("/api/"))) {
+    req.url = forwardedUrl.split("?")[0];
+  }
   try {
     await ensureDbReady();
   } catch (err) {
