@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 dotenv.config({ override: true });
-import express, { Request, Response, NextFunction } from 'express';
+import express from 'express';
+import type { Request, Response, NextFunction } from 'express';
 import path from 'path';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
@@ -275,18 +276,61 @@ function isValidImageUrl(urlOrData: string): boolean {
   }
 }
 
-async function startServer() {
-  // Initialize SQLite database
-  await initDatabase();
+export const app = express();
 
-  const app = express();
-  app.use(express.json({ limit: '15mb' }));
-  app.use(express.urlencoded({ extended: true, limit: '15mb' }));
+let dbInitialized = false;
+let dbInitPromise: Promise<any> | null = null;
 
-  // Health check
-  app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', time: new Date().toISOString() });
+export async function ensureDbReady() {
+  if (dbInitialized) return;
+  if (!dbInitPromise) {
+    dbInitPromise = initDatabase().then(() => {
+      dbInitialized = true;
+    });
+  }
+  await dbInitPromise;
+}
+
+// Ensure database is initialized before handling requests
+app.use(async (req, res, next) => {
+  try {
+    await ensureDbReady();
+    next();
+  } catch (err) {
+    console.error('[Server] Database initialization failed:', err);
+    res.status(500).json({ error: 'Database initialization failed' });
+  }
+});
+
+// Avoid hanging stream if request body was already parsed by Vercel serverless runtime
+app.use((req, res, next) => {
+  if (req.body && typeof req.body === 'object') {
+    return next();
+  }
+  express.json({ limit: '15mb' })(req, res, (err) => {
+    if (err) return next(err);
+    express.urlencoded({ extended: true, limit: '15mb' })(req, res, next);
   });
+});
+
+// URL normalization for Vercel edge / rewrites
+app.use((req, res, next) => {
+  const forwardedUrl = (req.headers['x-forwarded-url'] as string) || (req.headers['x-matched-path'] as string);
+  if (forwardedUrl && forwardedUrl.startsWith('/api')) {
+    req.url = forwardedUrl;
+  } else if (req.url && !req.url.startsWith('/api')) {
+    const apiPrefixes = ['/health', '/auth', '/webapps', '/settings', '/message', '/achievements', '/team', '/admin', '/servers'];
+    if (apiPrefixes.some((p) => req.url.startsWith(p))) {
+      req.url = '/api' + req.url;
+    }
+  }
+  next();
+});
+
+// Health check
+app.get(['/api/health', '/health'], (req, res) => {
+  res.json({ status: 'ok', time: new Date().toISOString() });
+});
 
   // ==========================================
   // PUBLIC ROUTES
@@ -1568,28 +1612,40 @@ async function startServer() {
   });
 
   // ==========================================
-  // VITE DEV / PRODUCTION MIDDLEWARE
+  // VITE DEV / PRODUCTION STANDALONE SERVER
   // ==========================================
-  if (process.env.NODE_ENV !== 'production') {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+  async function startServer() {
+    await ensureDbReady();
+
+    if (process.env.NODE_ENV !== 'production') {
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: 'spa',
+      });
+      app.use(vite.middlewares);
+    } else {
+      const distPath = path.join(process.cwd(), 'dist');
+      app.use(express.static(distPath));
+      app.get('*', (req, res) => {
+        res.sendFile(path.join(distPath, 'index.html'));
+      });
+    }
+
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`[Server] Web App Link Manager listening on http://0.0.0.0:${PORT}`);
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[Server] Web App Link Manager listening on http://0.0.0.0:${PORT}`);
-  });
-}
+  // Only auto-start the standalone server when executed directly as CLI script and not in serverless mode (e.g. Vercel)
+  const isServerless = process.env.VERCEL === '1' || Boolean(process.env.VERCEL_ENV) || Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME);
+  const entryFile = process.argv[1] || '';
+  const isDirectRun = entryFile.endsWith('server.ts') || entryFile.endsWith('server.cjs');
 
-startServer().catch(err => {
-  console.error('[Server] Fatal startup error:', err);
-  process.exit(1);
-});
+  if (!isServerless && isDirectRun) {
+    startServer().catch(err => {
+      console.error('[Server] Fatal startup error:', err);
+      process.exit(1);
+    });
+  }
+
+  export default app;

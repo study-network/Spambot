@@ -6,17 +6,26 @@ import initSqlJs, { type Database } from 'sql.js';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 
-const DATA_DIR = path.resolve(process.cwd(), 'data');
+const isVercel = process.env.VERCEL === '1' || Boolean(process.env.VERCEL_ENV);
+const REPO_DATA_DIR = path.resolve(process.cwd(), 'data');
+const REPO_DB_FILE = path.join(REPO_DATA_DIR, 'app_links.sqlite');
+
+// On Vercel, the runtime container filesystem is strictly read-only except in /tmp
+const DATA_DIR = isVercel ? '/tmp' : REPO_DATA_DIR;
 const DB_FILE = process.env.DATABASE_FILE 
-  ? path.resolve(process.cwd(), process.env.DATABASE_FILE)
-  : path.join(DATA_DIR, 'app_links.sqlite');
+  ? (path.isAbsolute(process.env.DATABASE_FILE) ? process.env.DATABASE_FILE : path.resolve(process.cwd(), process.env.DATABASE_FILE))
+  : (isVercel ? path.join('/tmp', 'app_links.sqlite') : path.join(DATA_DIR, 'app_links.sqlite'));
 
 let db: Database | null = null;
 
 function ensureDirectoryExists(filePath: string) {
-  const dir = path.dirname(filePath);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+  try {
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+  } catch (err) {
+    console.warn('Could not ensure directory exists:', err);
   }
 }
 
@@ -37,12 +46,29 @@ export async function initDatabase(): Promise<Database> {
   const SQL = await initSqlJs();
   ensureDirectoryExists(DB_FILE);
 
+  // If on Vercel and the writable DB in /tmp does not exist yet,
+  // copy from the repository bundled sqlite file if present
+  if (isVercel && !fs.existsSync(DB_FILE) && fs.existsSync(REPO_DB_FILE)) {
+    try {
+      fs.copyFileSync(REPO_DB_FILE, DB_FILE);
+    } catch (err) {
+      console.warn('Could not copy repository database to /tmp:', err);
+    }
+  }
+
   if (fs.existsSync(DB_FILE)) {
     try {
       const fileBuffer = fs.readFileSync(DB_FILE);
       db = new SQL.Database(fileBuffer);
     } catch (e) {
       console.warn('Could not read existing database file, creating a fresh one:', e);
+      db = new SQL.Database();
+    }
+  } else if (fs.existsSync(REPO_DB_FILE)) {
+    try {
+      const fileBuffer = fs.readFileSync(REPO_DB_FILE);
+      db = new SQL.Database(fileBuffer);
+    } catch (e) {
       db = new SQL.Database();
     }
   } else {
